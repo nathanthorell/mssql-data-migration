@@ -1,0 +1,27 @@
+{
+  "databases": [
+    {
+      "db_name": "MusicPlatform",
+      "waves": [
+        {
+          "wave_num": "1",
+          "tables": ["User", "Genre", "Album", "Artist", "Song"]
+        },
+        {
+          "wave_num": "2",
+          "tables": [
+            "Playlist",
+            "ArtistAlbum",
+            "AlbumSong",
+            "SongGenre",
+            "AlbumGenre"
+          ]
+        },
+        {
+          "wave_num": "3",
+          "tables": ["UserPlaylist"]
+        }
+      ]
+    }
+  ]
+}

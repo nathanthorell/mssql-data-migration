@@ -1,0 +1,7 @@
+.venv
+temp/
+**/.DS_Store
+.vscode
+files/
+logs/
+__pycache__

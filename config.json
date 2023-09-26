@@ -1,0 +1,18 @@
+{
+  "source": {
+    "sql_server": "127.0.0.1",
+    "database": "MusicPlatform",
+    "username": "sa",
+    "password": "TestPassword01",
+    "port": "1433",
+    "driver": "ODBC Driver 18 for SQL Server"
+  },
+  "destination": {
+    "sql_server": "127.0.0.1",
+    "database": "MusicPlatform",
+    "username": "sa",
+    "password": "TestPassword01",
+    "port": "1434",
+    "driver": "ODBC Driver 18 for SQL Server"
+  }
+}
