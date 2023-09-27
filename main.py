@@ -17,6 +17,9 @@ with open(table_config_path, "r") as f:
 src_conn = utils.get_conn(config=config, type="source")
 dest_conn = utils.get_conn(config=config, type="destination")
 
+# Before starting loop ensure STAGE schema exists at Destination
+utils.create_stage_schema(conn=dest_conn)
+
 # Loop through databases, waves, and tables
 dest_db = config["destination"]["database"]
 db_dict = [d for d in tables["databases"] if d["db_name"] == dest_db]
@@ -25,5 +28,26 @@ for wave in waves_list:
     print(f"Processing Wave # {wave['wave_num']}...")
     print("#####################################################")
     for table in wave["tables"]:
+        utils.create_stage_table(conn=dest_conn, table_name=table, recreate=True)
+
+        # Stage table setup for Primary Keys
+        current_pk_list = utils.get_primary_key(conn=dest_conn, table_name=table)
+
+        utils.create_stage_table_pk(
+            conn=dest_conn, table_name=table, pk_column_list=current_pk_list
+        )
+        utils.create_stage_table_newpk(conn=dest_conn, table_name=table)
+
+        # Stage table setup for Foreign Keys
+        current_fks_list = utils.get_foreign_keys(
+            conn=dest_conn, schema_name="dbo", table_name=table
+        )
+        utils.create_stage_table_fks(
+            conn=dest_conn,
+            source_schema="dbo",
+            table_name=table,
+            foreign_keys=current_fks_list,
+        )
+
         print(f"Starting data copy of [{table}]...")
         print("")
