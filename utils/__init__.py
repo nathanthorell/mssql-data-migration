@@ -16,6 +16,7 @@ from .constraint_details import (
     get_foreign_keys,
     get_uniques
 )
+from .copy_data import copy_src_table_to_stage
 
 __all__ = [
     get_conn,
@@ -29,5 +30,6 @@ __all__ = [
     create_stage_table_pk,
     get_primary_key,
     get_foreign_keys,
-    get_uniques
+    get_uniques,
+    copy_src_table_to_stage
 ]

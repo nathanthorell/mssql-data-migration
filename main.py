@@ -20,6 +20,9 @@ dest_conn = utils.get_conn(config=config, type="destination")
 # Before starting loop ensure STAGE schema exists at Destination
 utils.create_stage_schema(conn=dest_conn)
 
+# Table Schema Constant
+SCHEMA = "dbo"
+
 # Loop through databases, waves, and tables
 dest_db = config["destination"]["database"]
 db_dict = [d for d in tables["databases"] if d["db_name"] == dest_db]
@@ -40,14 +43,36 @@ for wave in waves_list:
 
         # Stage table setup for Foreign Keys
         current_fks_list = utils.get_foreign_keys(
-            conn=dest_conn, schema_name="dbo", table_name=table
+            conn=dest_conn, schema_name=SCHEMA, table_name=table
         )
         utils.create_stage_table_fks(
             conn=dest_conn,
-            source_schema="dbo",
+            schema_name=SCHEMA,
             table_name=table,
             foreign_keys=current_fks_list,
         )
 
+        column_list = utils.get_column_list(conn=dest_conn, schema_name=SCHEMA, table_name=table)
+        has_identity = utils.parse_identity(current_pk_list)
+
         print(f"Starting data copy of [{table}]...")
+        utils.copy_src_table_to_stage(
+            src_conn=src_conn,
+            dest_conn=dest_conn,
+            stage_schema="STAGE",
+            schema_name=SCHEMA,
+            table_name=table,
+            column_list=column_list,
+            has_identity=has_identity
+        )
+
+        # Determine the type of table and call correct merge function
+        if current_pk_list:
+            if has_identity:
+                print("merge_identity_table_data")
+            else:
+                print("merge_composite_table_data")
+        else:
+            print("merge_heap_table_data")
+
         print("")

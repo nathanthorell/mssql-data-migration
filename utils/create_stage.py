@@ -106,7 +106,7 @@ def create_stage_table_newpk(conn, table_name):
     cnxn.close()
 
 
-def create_stage_table_fks(conn, source_schema, table_name, foreign_keys):
+def create_stage_table_fks(conn, schema_name, table_name, foreign_keys):
     "create new columns on stage table for the fk columns"
     cnxn = pyodbc.connect(conn, autocommit=True)
     crsr = cnxn.cursor()
@@ -119,7 +119,7 @@ def create_stage_table_fks(conn, source_schema, table_name, foreign_keys):
         # Get the data type of the foreign key column
         data_type_query = f"""
             SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = '{source_schema}'
+            WHERE TABLE_SCHEMA = '{schema_name}'
                 AND TABLE_NAME = '{table_name}'
                 AND COLUMN_NAME = '{column_name}'
         """
@@ -145,7 +145,7 @@ def create_stage_table_fks(conn, source_schema, table_name, foreign_keys):
             # Construct and execute the ALTER TABLE query for each new column
             alter_query = f"""
                 ALTER TABLE [STAGE].[{table_name}]
-                ADD [{new_column_name}] {data_type} NULL  -- Foreign key columns can be nullable
+                ADD [{new_column_name}] {data_type} NULL
             """
             crsr.execute(alter_query)
             print(
