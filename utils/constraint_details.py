@@ -1,7 +1,7 @@
 import pyodbc
 
 
-def get_primary_key(conn, table_name):
+def get_primary_key(conn, schema_name, table_name):
     "query the table and return an object of the primary key"
     cnxn = pyodbc.connect(conn, autocommit=True)
     crsr = cnxn.cursor()
@@ -12,7 +12,8 @@ def get_primary_key(conn, table_name):
     FROM sys.key_constraints kc
     INNER JOIN sys.index_columns ic ON kc.parent_object_id = ic.object_id  and kc.unique_index_id = ic.index_id
     INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
-    WHERE kc.type = 'PK' AND OBJECT_NAME(kc.parent_object_id) = '{table_name}'
+    WHERE kc.type = 'PK' AND OBJECT_SCHEMA_NAME(kc.parent_object_id) = '{schema_name}'
+    AND OBJECT_NAME(kc.parent_object_id) = '{table_name}'
     """
 
     crsr.execute(pk_query)

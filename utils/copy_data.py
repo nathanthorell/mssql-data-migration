@@ -1,4 +1,5 @@
 import pyodbc
+from utils.update_keys import create_key_stage, update_new_pk_in_stage
 
 
 def copy_src_table_to_stage(
@@ -38,3 +39,94 @@ def copy_src_table_to_stage(
 
     dest_crsr.close()
     dest_cnxn.close()
+
+
+def merge_identity_table_data(
+    conn, stage_schema, table_schema, table_name, column_list, uniques, identity
+):
+    "take data from stage and insert it into destination tables returning PK values to stage"
+    cnxn = pyodbc.connect(conn, autocommit=True)
+    crsr = cnxn.cursor()
+
+    print(f"Currently on: {table_schema}.{table_name}")
+
+    columns = column_list.split(",")
+
+    new_identity_column, source_identity_column = create_key_stage(
+        conn=conn,
+        stage_schema=stage_schema,
+        table_schema=table_schema,
+        table_name=table_name,
+        identity=identity,
+    )
+
+    # build the WHEN condition based on uniques
+    if uniques:
+        when_conditions = []
+        for constraint_name, uq_columns in uniques.items():
+            # Create a list of conditions for each column in the unique constraint
+            column_conditions = []
+            for col in uq_columns:
+                # Check that the source column is not NULL
+                column_conditions.append(f"source.[{col}] IS NOT NULL")
+
+            combined_condition = " AND ".join(column_conditions)
+
+            # Include the duplicate checking logic using NOT EXISTS
+            duplicate_check = f"""
+            NOT EXISTS (SELECT 1
+            FROM [{table_schema}].[{table_name}] AS existing
+            WHERE {' AND '.join(f'existing.[{col}] = source.[{col}]' for col in uq_columns)}
+            )
+            """
+
+            # Combine the source column condition and duplicate check with AND
+            full_condition = f"({combined_condition}) AND {duplicate_check}"
+
+            # Add the full condition to the list of when_conditions
+            when_conditions.append(full_condition)
+
+        # Combine all conditions with OR since any of them can apply
+        when_condition = f"WHEN NOT MATCHED AND ({' OR '.join(when_conditions)})"
+    else:
+        when_condition = "WHEN NOT MATCHED"
+
+    # Perform the MERGE operation with OUTPUT to the StagingTable
+    merge_query = f"""
+    MERGE INTO [{table_schema}].[{table_name}] AS target
+    USING [{stage_schema}].[{table_name}] AS source
+    ON 1 = 0  -- Ensures the INSERT part of the MERGE is executed for all rows
+    {when_condition} THEN
+        INSERT ({', '.join(columns)})
+        VALUES ({', '.join('source.' + col for col in columns)})
+    OUTPUT inserted.{identity} AS [{new_identity_column}], source.{identity} AS [{source_identity_column}]
+    INTO [{stage_schema}].[KeyStage];
+    """
+    crsr.execute(merge_query)
+
+    # Retrieve data from the StagingTable
+    select_staging_data_sql = f"""
+        SELECT [{new_identity_column}], [{source_identity_column}]
+        FROM [{stage_schema}].[KeyStage]
+    """
+    crsr.execute(select_staging_data_sql)
+
+    # Fetch the results into Python variables
+    key_arrays = {
+        "column_name": identity,
+        "inserted_identity_values": [],
+        "source_identity_values": [],
+    }
+
+    for row in crsr:
+        key_arrays["inserted_identity_values"].append(row[0])
+        key_arrays["source_identity_values"].append(row[1])
+    update_new_pk_in_stage(
+        conn=conn,
+        stage_schema=stage_schema,
+        table_name=table_name,
+        key_arrays=key_arrays,
+    )
+
+    crsr.close()
+    cnxn.close()

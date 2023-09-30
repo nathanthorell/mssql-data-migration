@@ -22,6 +22,7 @@ utils.create_stage_schema(conn=dest_conn)
 
 # Table Schema Constant
 SCHEMA = "dbo"
+STAGE_SCHEMA = "STAGE"
 
 # Loop through databases, waves, and tables
 dest_db = config["destination"]["database"]
@@ -33,8 +34,20 @@ for wave in waves_list:
     for table in wave["tables"]:
         utils.create_stage_table(conn=dest_conn, table_name=table, recreate=True)
 
-        # Stage table setup for Primary Keys
-        current_pk_list = utils.get_primary_key(conn=dest_conn, table_name=table)
+        # Get table details for PK and columns
+        current_pk_list = utils.get_primary_key(
+            conn=dest_conn, schema_name=SCHEMA, table_name=table
+        )
+        has_identity = utils.parse_identity(current_pk_list)
+        full_column_list = utils.get_column_list(
+            conn=dest_conn, schema_name=SCHEMA, table_name=table
+        )
+        unique_constraints = utils.get_uniques(
+            conn=dest_conn, schema_name=SCHEMA, table_name=table
+        )
+        column_list_without_pk = utils.get_column_list(
+            conn=dest_conn, schema_name=SCHEMA, table_name=table, include_pk=False
+        )
 
         utils.create_stage_table_pk(
             conn=dest_conn, table_name=table, pk_column_list=current_pk_list
@@ -52,24 +65,29 @@ for wave in waves_list:
             foreign_keys=current_fks_list,
         )
 
-        column_list = utils.get_column_list(conn=dest_conn, schema_name=SCHEMA, table_name=table)
-        has_identity = utils.parse_identity(current_pk_list)
-
         print(f"Starting data copy of [{table}]...")
         utils.copy_src_table_to_stage(
             src_conn=src_conn,
             dest_conn=dest_conn,
-            stage_schema="STAGE",
+            stage_schema=STAGE_SCHEMA,
             schema_name=SCHEMA,
             table_name=table,
-            column_list=column_list,
-            has_identity=has_identity
+            column_list=full_column_list,
+            has_identity=has_identity,
         )
 
         # Determine the type of table and call correct merge function
         if current_pk_list:
             if has_identity:
-                print("merge_identity_table_data")
+                utils.merge_identity_table_data(
+                    conn=dest_conn,
+                    stage_schema=STAGE_SCHEMA,
+                    table_schema=SCHEMA,
+                    table_name=table,
+                    column_list=column_list_without_pk,
+                    uniques=unique_constraints,
+                    identity=has_identity,
+                )
             else:
                 print("merge_composite_table_data")
         else:
