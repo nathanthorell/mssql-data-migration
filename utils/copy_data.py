@@ -64,30 +64,35 @@ def merge_identity_table_data(
     if uniques:
         when_conditions = []
         for constraint_name, uq_columns in uniques.items():
-            # Create a list of conditions for each column in the unique constraint
-            column_conditions = []
-            for col in uq_columns:
-                # Check that the source column is not NULL
-                column_conditions.append(f"source.[{col}] IS NOT NULL")
+            # The PK is technically a UNIQUE constraint, but we need to ignore it
+            if not all(column in identity for column in uq_columns):
+                # Create a list of conditions for each column in the unique constraint
+                column_conditions = []
+                for col in uq_columns:
+                    # Check that the source column is not NULL
+                    column_conditions.append(f"source.[{col}] IS NOT NULL")
 
-            combined_condition = " AND ".join(column_conditions)
+                combined_condition = " AND ".join(column_conditions)
 
-            # Include the duplicate checking logic using NOT EXISTS
-            duplicate_check = f"""
-            NOT EXISTS (SELECT 1
-            FROM [{table_schema}].[{table_name}] AS existing
-            WHERE {' AND '.join(f'existing.[{col}] = source.[{col}]' for col in uq_columns)}
-            )
-            """
+                # Include the duplicate checking logic using NOT EXISTS
+                duplicate_check = f"""
+                NOT EXISTS (SELECT 1
+                FROM [{table_schema}].[{table_name}] AS existing
+                WHERE {' AND '.join(f'existing.[{col}] = source.[{col}]' for col in uq_columns)}
+                )
+                """
 
-            # Combine the source column condition and duplicate check with AND
-            full_condition = f"({combined_condition}) AND {duplicate_check}"
+                # Combine the source column condition and duplicate check with AND
+                full_condition = f"({combined_condition}) AND {duplicate_check}"
 
-            # Add the full condition to the list of when_conditions
-            when_conditions.append(full_condition)
+                # Add the full condition to the list of when_conditions
+                when_conditions.append(full_condition)
 
         # Combine all conditions with OR since any of them can apply
-        when_condition = f"WHEN NOT MATCHED AND ({' OR '.join(when_conditions)})"
+        if when_conditions:
+            when_condition = f"WHEN NOT MATCHED AND {' AND '.join(when_conditions)}"
+        else:
+            when_condition = "WHEN NOT MATCHED"
     else:
         when_condition = "WHEN NOT MATCHED"
 
@@ -121,6 +126,7 @@ def merge_identity_table_data(
     for row in crsr:
         key_arrays["inserted_identity_values"].append(row[0])
         key_arrays["source_identity_values"].append(row[1])
+
     update_new_pk_in_stage(
         conn=conn,
         stage_schema=stage_schema,
