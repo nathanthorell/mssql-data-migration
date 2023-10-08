@@ -106,7 +106,7 @@ def create_stage_table_newpk(conn, table_name):
     cnxn.close()
 
 
-def create_stage_table_fks(conn, schema_name, table_name, foreign_keys):
+def create_stage_table_fks(conn, stage_schema, schema_name, table_name, foreign_keys):
     "create new columns on stage table for the fk columns"
     cnxn = pyodbc.connect(conn, autocommit=True)
     crsr = cnxn.cursor()
@@ -134,7 +134,7 @@ def create_stage_table_fks(conn, schema_name, table_name, foreign_keys):
             FROM sys.columns c
             INNER JOIN sys.tables t ON c.object_id = t.object_id
             INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
-            WHERE s.name = 'STAGE'
+            WHERE s.name = '{stage_schema}'
                 AND t.name = '{table_name}'
                 AND c.name = '{new_column_name}'
         """
@@ -144,16 +144,16 @@ def create_stage_table_fks(conn, schema_name, table_name, foreign_keys):
         if not column_exists:
             # Construct and execute the ALTER TABLE query for each new column
             alter_query = f"""
-                ALTER TABLE [STAGE].[{table_name}]
+                ALTER TABLE [{stage_schema}].[{table_name}]
                 ADD [{new_column_name}] {data_type} NULL
             """
             crsr.execute(alter_query)
             print(
-                f"New column '{new_column_name}' added to '[STAGE].[{table_name}]' with data type '{data_type}'."
+                f"New column '{new_column_name}' added to '[{stage_schema}].[{table_name}]', data type '{data_type}'."
             )
         else:
             print(
-                f"Column '{new_column_name}' already exists in table '[STAGE].[{table_name}]'."
+                f"Column '{new_column_name}' already exists in table '[{stage_schema}].[{table_name}]'."
             )
 
     cnxn.commit()

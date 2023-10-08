@@ -13,7 +13,7 @@ from .create_stage import (
 )
 from .constraint_details import get_primary_key, get_foreign_keys, get_uniques
 from .copy_data import copy_src_table_to_stage, merge_identity_table_data
-from .update_keys import create_key_stage, update_new_pk_in_stage
+from .update_keys import create_key_stage, update_new_pk_in_stage, update_fks_in_stage
 
 __all__ = [
     get_conn,
@@ -32,4 +32,5 @@ __all__ = [
     merge_identity_table_data,
     create_key_stage,
     update_new_pk_in_stage,
+    update_fks_in_stage,
 ]

@@ -61,3 +61,26 @@ def update_new_pk_in_stage(conn, stage_schema, table_name, key_arrays):
 
     crsr.close()
     cnxn.close()
+
+
+def update_fks_in_stage(conn, stage_schema, table_name, fks_list):
+    """"""
+    cnxn = pyodbc.connect(conn, autocommit=True)
+    crsr = cnxn.cursor()
+
+    for fk in fks_list:
+        update_query = f"""
+            UPDATE [{stage_schema}].[{table_name}]
+            SET New_{fk['parent_column']} =
+            COALESCE(parent.New_{fk['referenced_column']}, parent.{fk['referenced_column']})
+            FROM [{stage_schema}].[{table_name}] stage
+            INNER JOIN [{stage_schema}].[{fk['referenced_table']}] parent
+            ON stage.{fk['parent_column']} = parent.{fk['referenced_column']}
+        """
+        crsr.execute(update_query)
+        cnxn.commit()
+
+        print(f"Updated Foreign Key [{fk['name']}]")
+
+    crsr.close()
+    cnxn.close()

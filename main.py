@@ -49,17 +49,18 @@ for wave in waves_list:
             conn=dest_conn, schema_name=SCHEMA, table_name=table, include_pk=False
         )
 
+        # Stage table setup for PK and FKs
         utils.create_stage_table_pk(
             conn=dest_conn, table_name=table, pk_column_list=current_pk_list
         )
         utils.create_stage_table_newpk(conn=dest_conn, table_name=table)
 
-        # Stage table setup for Foreign Keys
         current_fks_list = utils.get_foreign_keys(
             conn=dest_conn, schema_name=SCHEMA, table_name=table
         )
         utils.create_stage_table_fks(
             conn=dest_conn,
+            stage_schema=STAGE_SCHEMA,
             schema_name=SCHEMA,
             table_name=table,
             foreign_keys=current_fks_list,
@@ -92,5 +93,13 @@ for wave in waves_list:
                 print("merge_composite_table_data")
         else:
             print("merge_heap_table_data")
+
+        if current_fks_list:
+            utils.update_fks_in_stage(
+                conn=dest_conn,
+                stage_schema=STAGE_SCHEMA,
+                table_name=table,
+                fks_list=current_fks_list,
+            )
 
         print("")
