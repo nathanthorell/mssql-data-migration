@@ -1,7 +1,7 @@
 import pyodbc
 
 
-def create_key_stage(conn, stage_schema, table_schema, table_name, identity):
+def create_key_stage(conn, stage_schema, schema_name, table_name, identity):
     "create KeyStage table if it doesnt exist"
     cnxn = pyodbc.connect(conn, autocommit=True)
     crsr = cnxn.cursor()
@@ -9,7 +9,7 @@ def create_key_stage(conn, stage_schema, table_schema, table_name, identity):
     get_identity_data_type_sql = f"""
             SELECT DATA_TYPE
             FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = '{table_schema}'
+            WHERE TABLE_SCHEMA = '{schema_name}'
             AND TABLE_NAME = '{table_name}' AND COLUMN_NAME = '{identity}'
         """
     crsr.execute(get_identity_data_type_sql)

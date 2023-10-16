@@ -42,7 +42,7 @@ def copy_src_table_to_stage(
 
 
 def merge_identity_table_data(
-    conn, stage_schema, table_schema, table_name, column_list, uniques, identity
+    conn, stage_schema, schema_name, table_name, column_list, uniques, identity
 ):
     "take data from stage and insert it into destination tables returning PK values to stage"
     cnxn = pyodbc.connect(conn, autocommit=True)
@@ -53,7 +53,7 @@ def merge_identity_table_data(
     new_identity_column, source_identity_column = create_key_stage(
         conn=conn,
         stage_schema=stage_schema,
-        table_schema=table_schema,
+        schema_name=schema_name,
         table_name=table_name,
         identity=identity,
     )
@@ -75,7 +75,7 @@ def merge_identity_table_data(
                 # Include the duplicate checking logic using NOT EXISTS
                 duplicate_check = f"""
                 NOT EXISTS (SELECT 1
-                FROM [{table_schema}].[{table_name}] AS existing
+                FROM [{schema_name}].[{table_name}] AS existing
                 WHERE {' AND '.join(f'existing.[{col}] = source.[{col}]' for col in uq_columns)}
                 )
                 """
@@ -96,7 +96,7 @@ def merge_identity_table_data(
 
     # Perform the MERGE operation with OUTPUT to the StagingTable
     merge_query = f"""
-    MERGE INTO [{table_schema}].[{table_name}] AS target
+    MERGE INTO [{schema_name}].[{table_name}] AS target
     USING [{stage_schema}].[{table_name}] AS source
     ON 1 = 0  -- Ensures the INSERT part of the MERGE is executed for all rows
     {when_condition} THEN
@@ -142,6 +142,48 @@ def merge_identity_table_data(
     WHERE New_{identity} IS NULL
     """
     crsr.execute(unique_null_pks_sql)
+
+    crsr.close()
+    cnxn.close()
+
+
+def merge_composite_table_data(
+    conn, stage_schema, schema_name, table_name, column_list, pk_columns
+):
+    "take composite pk data from stage and insert it into destination table"
+    print(f"Merging composite table: {table_name}")
+    cnxn = pyodbc.connect(conn, autocommit=True)
+    crsr = cnxn.cursor()
+
+    columns = column_list.split(",")
+
+    # Construct the list of PK columns in the format:
+    # "source.New_column1 = target.column1 AND source.New_column2 = target.column2"
+    pk_conditions = []
+    values_columns = []
+    for pk_col in pk_columns:
+        col_name = pk_col["PrimaryKeyName"]
+        if col_name in columns:
+            pk_conditions.append(f"source.New_{col_name} = target.{col_name}")
+            values_columns.append(col_name)
+
+    pk_conditions = " AND ".join(pk_conditions)
+
+    # Construct the VALUES part
+    values_part = ", ".join(
+        f"source.New_{col}" if col in values_columns else f"source.{col}"
+        for col in columns
+    )
+
+    merge_query = f"""
+    MERGE INTO [{schema_name}].[{table_name}] AS target
+    USING [{stage_schema}].[{table_name}] AS source
+    ON {pk_conditions}
+    WHEN NOT MATCHED THEN
+        INSERT ({', '.join(columns)})
+        VALUES ({values_part});
+    """
+    crsr.execute(merge_query)
 
     crsr.close()
     cnxn.close()

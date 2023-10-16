@@ -34,6 +34,9 @@ for wave in waves_list:
     for table in wave["tables"]:
         utils.create_stage_table(conn=dest_conn, table_name=table, recreate=True)
 
+        # Initialize this for later use during merge loop
+        composite_table = False
+
         # Get table details for PK and columns
         current_pk_list = utils.get_primary_key(
             conn=dest_conn, schema_name=SCHEMA, table_name=table
@@ -83,14 +86,15 @@ for wave in waves_list:
                 utils.merge_identity_table_data(
                     conn=dest_conn,
                     stage_schema=STAGE_SCHEMA,
-                    table_schema=SCHEMA,
+                    schema_name=SCHEMA,
                     table_name=table,
                     column_list=column_list_without_pk,
                     uniques=unique_constraints,
                     identity=has_identity,
                 )
             else:
-                print("merge_composite_table_data")
+                # This will be merged after the FKs are updated
+                composite_table = True
         else:
             print("merge_heap_table_data")
 
@@ -100,6 +104,17 @@ for wave in waves_list:
                 stage_schema=STAGE_SCHEMA,
                 table_name=table,
                 fks_list=current_fks_list,
+            )
+
+        # Now that fks are updated, if table is composite pk, merge
+        if composite_table:
+            utils.merge_composite_table_data(
+                conn=dest_conn,
+                stage_schema=STAGE_SCHEMA,
+                schema_name=SCHEMA,
+                table_name=table,
+                column_list=full_column_list,
+                pk_columns=current_pk_list,
             )
 
         print("")
