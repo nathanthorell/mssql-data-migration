@@ -48,8 +48,6 @@ def merge_identity_table_data(
     cnxn = pyodbc.connect(conn, autocommit=True)
     crsr = cnxn.cursor()
 
-    print(f"Currently on: {table_schema}.{table_name}")
-
     columns = column_list.split(",")
 
     new_identity_column, source_identity_column = create_key_stage(
@@ -133,6 +131,17 @@ def merge_identity_table_data(
         table_name=table_name,
         key_arrays=key_arrays,
     )
+
+    # Identify any remaining null PKs that didnt get updated above
+    # and assume these are duplicates from a UNIQUE constraint so set the New_
+    # PK equal to the original PK
+    # TODO: There's probably a better way to do this, might fix later
+    unique_null_pks_sql = f"""
+    UPDATE [{stage_schema}].[{table_name}]
+    SET New_{identity} = {identity}
+    WHERE New_{identity} IS NULL
+    """
+    crsr.execute(unique_null_pks_sql)
 
     crsr.close()
     cnxn.close()
