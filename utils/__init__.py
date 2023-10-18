@@ -1,4 +1,4 @@
-from .get_conns import get_conn
+from .get_conns import get_conn_string
 from .table_details import (
     get_column_list,
     get_identity,
@@ -20,7 +20,7 @@ from .copy_data import (
 from .update_keys import create_key_stage, update_new_pk_in_stage, update_fks_in_stage
 
 __all__ = [
-    get_conn,
+    get_conn_string,
     get_column_list,
     get_identity,
     parse_identity,

@@ -1,10 +1,6 @@
-import pyodbc
-
-
 def create_stage_schema(conn):
     "create stage schema if it doesnt exist"
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
     crsr.execute("SELECT * FROM sys.schemas WHERE name = 'STAGE'")
     result = crsr.fetchall()
     if result is None or len(result) == 0:
@@ -13,13 +9,11 @@ def create_stage_schema(conn):
     else:
         print("STAGE schema already exists")
     crsr.close()
-    cnxn.close()
 
 
 def create_stage_table(conn, table_name, recreate=False):
     "create table in STAGE schema from it's dbo equivalant"
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     create_table_query = (
         f"SELECT TOP 0 * INTO STAGE.[{table_name}] FROM dbo.[{table_name}]"
@@ -44,13 +38,11 @@ def create_stage_table(conn, table_name, recreate=False):
             )
 
     crsr.close()
-    cnxn.close()
 
 
 def create_stage_table_pk(conn, table_name, pk_column_list):
     "create the same PK on the stage table"
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     pk_columns = ", ".join(item["PrimaryKeyName"] for item in pk_column_list)
     create_pk_query = f"""
@@ -64,8 +56,7 @@ def create_stage_table_pk(conn, table_name, pk_column_list):
 
 def create_stage_table_newpk(conn, table_name):
     "create new column on stage table of the pk column"
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     # Retrieve primary key column information from sys schema
     query = f"""
@@ -78,8 +69,7 @@ def create_stage_table_newpk(conn, table_name):
     WHERE s.name = 'STAGE'
         AND t.name = '{table_name}'
         AND ic.index_id = 1  -- Assuming the primary key index is always 1
-"""
-    crsr = cnxn.cursor()
+    """
     crsr.execute(query)
     pk_info = crsr.fetchall()
 
@@ -100,16 +90,14 @@ def create_stage_table_newpk(conn, table_name):
                 f"New column '{new_column_name}' added to '[STAGE].[{table_name}]' with data type '{data_type}'."
             )
 
-        cnxn.commit()
+        crsr.commit()
 
     crsr.close()
-    cnxn.close()
 
 
 def create_stage_table_fks(conn, stage_schema, schema_name, table_name, foreign_keys):
     "create new columns on stage table for the fk columns"
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     new_column_prefix = "New_"  # Prefix for the new columns
 
@@ -156,7 +144,4 @@ def create_stage_table_fks(conn, stage_schema, schema_name, table_name, foreign_
                 f"Column '{new_column_name}' already exists in table '[{stage_schema}].[{table_name}]'."
             )
 
-    cnxn.commit()
-
     crsr.close()
-    cnxn.close()

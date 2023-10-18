@@ -1,4 +1,3 @@
-import pyodbc
 from utils.update_keys import create_key_stage, update_new_pk_in_stage
 
 
@@ -12,8 +11,9 @@ def copy_src_table_to_stage(
     has_identity=True,
 ):
     "copy a tables data from src_conn to dest_conn in stage schema"
-    src_cnxn = pyodbc.connect(src_conn, autocommit=True)
-    src_crsr = src_cnxn.cursor()
+    src_crsr = src_conn.cursor()
+
+    print(f"Starting source to stage table copy of [{table_name}]...")
 
     placeholders = ",".join(["?" for _ in column_list.split(",")])
 
@@ -23,10 +23,8 @@ def copy_src_table_to_stage(
     records = src_crsr.fetchall()
 
     src_crsr.close()
-    src_cnxn.close()
 
-    dest_cnxn = pyodbc.connect(dest_conn, autocommit=True)
-    dest_crsr = dest_cnxn.cursor()
+    dest_crsr = dest_conn.cursor()
 
     # Insert records into STAGE table
     if has_identity:
@@ -38,15 +36,13 @@ def copy_src_table_to_stage(
         dest_crsr.execute(f"SET IDENTITY_INSERT [{stage_schema}].[{table_name}] OFF")
 
     dest_crsr.close()
-    dest_cnxn.close()
 
 
 def merge_identity_table_data(
     conn, stage_schema, schema_name, table_name, column_list, uniques, identity
 ):
     "take data from stage and insert it into destination tables returning PK values to stage"
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     columns = column_list.split(",")
 
@@ -144,7 +140,6 @@ def merge_identity_table_data(
     crsr.execute(unique_null_pks_sql)
 
     crsr.close()
-    cnxn.close()
 
 
 def merge_composite_table_data(
@@ -152,8 +147,7 @@ def merge_composite_table_data(
 ):
     "take composite pk data from stage and insert it into destination table"
     print(f"Merging composite table: {table_name}")
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     columns = column_list.split(",")
 
@@ -186,4 +180,3 @@ def merge_composite_table_data(
     crsr.execute(merge_query)
 
     crsr.close()
-    cnxn.close()

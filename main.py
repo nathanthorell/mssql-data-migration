@@ -1,6 +1,7 @@
 import json
 import os
 import utils
+import pyodbc
 
 # Get directory of current script and construct paths for configs
 script_dir = os.path.dirname(__file__)
@@ -14,8 +15,12 @@ with open(config_path, "r") as f:
 with open(table_config_path, "r") as f:
     tables = json.load(f)
 
-src_conn = utils.get_conn(config=config, type="source")
-dest_conn = utils.get_conn(config=config, type="destination")
+# Establish DB connections, pass in Connection object to functions instead
+src_conn_string = utils.get_conn_string(config=config, type="source")
+dest_conn_string = utils.get_conn_string(config=config, type="destination")
+
+src_conn = pyodbc.connect(src_conn_string, autocommit=True)
+dest_conn = pyodbc.connect(dest_conn_string, autocommit=True)
 
 # Before starting loop ensure STAGE schema exists at Destination
 utils.create_stage_schema(conn=dest_conn)
@@ -69,7 +74,6 @@ for wave in waves_list:
             foreign_keys=current_fks_list,
         )
 
-        print(f"Starting data copy of [{table}]...")
         utils.copy_src_table_to_stage(
             src_conn=src_conn,
             dest_conn=dest_conn,
@@ -118,3 +122,7 @@ for wave in waves_list:
             )
 
         print("")
+
+# Close connections
+src_conn.close()
+dest_conn.close()

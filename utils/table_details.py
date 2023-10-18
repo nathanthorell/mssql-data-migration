@@ -1,10 +1,6 @@
-import pyodbc
-
-
 def get_column_list(conn, schema_name, table_name, include_pk=True):
     """get strings of columns from a table"""
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     if include_pk:
         column_list_query = f"""
@@ -33,15 +29,13 @@ def get_column_list(conn, schema_name, table_name, include_pk=True):
         column_list = ""
 
     crsr.close()
-    cnxn.close()
 
     return column_list
 
 
 def get_identity(conn, schema_name, table_name):
     "check if table has an auto-incrementing identity PK"
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     identity_query = f"""
         SELECT COLUMN_NAME
@@ -59,7 +53,6 @@ def get_identity(conn, schema_name, table_name):
         has_identity = None
 
     crsr.close()
-    cnxn.close()
 
     return has_identity
 

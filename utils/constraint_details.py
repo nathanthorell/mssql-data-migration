@@ -1,10 +1,6 @@
-import pyodbc
-
-
 def get_primary_key(conn, schema_name, table_name):
     "query the table and return an object of the primary key"
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     pk_query = f"""
     SELECT c.name AS PrimaryKeyName, c.column_id AS ColumnId,
@@ -27,8 +23,7 @@ def get_primary_key(conn, schema_name, table_name):
 
 
 def get_foreign_keys(conn, schema_name, table_name):
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     foreign_keys_query = f"""
     SELECT
@@ -62,15 +57,13 @@ def get_foreign_keys(conn, schema_name, table_name):
         foreign_keys.append(foreign_key)
 
     crsr.close()
-    cnxn.close()
 
     return foreign_keys
 
 
 def get_uniques(conn, schema_name, table_name):
     "Gets any UNIQUE constraints from the table"
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     unique_constraints_query = f"""
     SELECT DISTINCT i.name AS constraint_name, c.name AS column_name
@@ -99,6 +92,5 @@ def get_uniques(conn, schema_name, table_name):
             unique_constraints[constraint_name].append(column_name)
 
     crsr.close()
-    cnxn.close()
 
     return unique_constraints

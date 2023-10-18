@@ -1,10 +1,6 @@
-import pyodbc
-
-
 def create_key_stage(conn, stage_schema, schema_name, table_name, identity):
     "create KeyStage table if it doesnt exist"
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     get_identity_data_type_sql = f"""
             SELECT DATA_TYPE
@@ -35,15 +31,13 @@ def create_key_stage(conn, stage_schema, schema_name, table_name, identity):
     crsr.execute(create_staging_table_sql)
 
     crsr.close()
-    cnxn.close()
 
     return new_identity_column, source_identity_column
 
 
 def update_new_pk_in_stage(conn, stage_schema, table_name, key_arrays):
     "Update the New_ column in the STAGE schema"
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     # Parse the key_array
     column_name = key_arrays["column_name"]
@@ -60,13 +54,11 @@ def update_new_pk_in_stage(conn, stage_schema, table_name, key_arrays):
         crsr.execute(update_sql, inserted_id, source_id)
 
     crsr.close()
-    cnxn.close()
 
 
 def update_fks_in_stage(conn, stage_schema, table_name, fks_list):
     """"""
-    cnxn = pyodbc.connect(conn, autocommit=True)
-    crsr = cnxn.cursor()
+    crsr = conn.cursor()
 
     for fk in fks_list:
         update_query = f"""
@@ -78,9 +70,7 @@ def update_fks_in_stage(conn, stage_schema, table_name, fks_list):
             ON stage.{fk['parent_column']} = parent.{fk['referenced_column']}
         """
         crsr.execute(update_query)
-        cnxn.commit()
 
         print(f"Updated Foreign Key [{fk['name']}]")
 
     crsr.close()
-    cnxn.close()

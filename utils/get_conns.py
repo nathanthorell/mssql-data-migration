@@ -1,4 +1,4 @@
-def get_conn(config, type):
+def get_conn_string(config, type):
     """
     Extract Source SQL Server credentials from config
     config expects json; type expects "source" or "destination"
@@ -9,6 +9,7 @@ def get_conn(config, type):
     password = config[f"{type}"]["password"]
     port = config[f"{type}"]["port"]
     driver = config[f"{type}"]["driver"]
+    encrypt = config[f"{type}"]["encrypt"]
 
     conn = (
         f"DRIVER={driver};"
@@ -16,6 +17,7 @@ def get_conn(config, type):
         f"DATABASE={db};"
         f"UID={user};"
         f"PWD={password};"
-        f"Encrypt=no"
+        f"Encrypt={encrypt};"
+        "MARS_Connection=yes;"  # this is needed to handle Multiple Active Result Sets
     )
     return conn
