@@ -3,7 +3,8 @@ from .table_details import (
     get_column_list,
     get_identity,
     parse_identity,
-    get_column_data_type
+    get_column_data_type,
+    is_pk_entirely_fks,
 )
 from .create_stage import (
     create_stage_schema,
@@ -26,6 +27,7 @@ __all__ = [
     get_identity,
     parse_identity,
     get_column_data_type,
+    is_pk_entirely_fks,
     create_stage_schema,
     create_stage_table,
     create_stage_table_fks,

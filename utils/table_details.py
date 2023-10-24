@@ -83,3 +83,12 @@ def get_column_data_type(conn, schema_name, table_name, column_name):
     data_type = crsr.fetchone()[0]
 
     return data_type
+
+
+def is_pk_entirely_fks(pk_list, fk_list):
+    # Extract the column names from the PK and FK lists
+    pk_columns = [pk['PrimaryKeyName'] for pk in pk_list]
+    fk_columns = [(fk['parent_table'], fk['parent_column']) for fk in fk_list]
+
+    # Check if all PK columns are in the list of FK columns
+    return set(pk_columns).issubset(set(col[1] for col in fk_columns))
