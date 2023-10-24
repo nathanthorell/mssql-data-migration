@@ -2,11 +2,12 @@
 
 The goal is to merge the data of one database into another (of identical schemas), accounting for all the primary and foreign keys created by auto-incrementing identity columns.
 
-The scope of this data migration covers three types of tables:
+The scope of this data migration covers four types of tables:
 
 1. Identity Primary Key.  A single Id column that auto increments makes up the primary key.
 1. Composite Primary Key.  The PK is a combination of multiple foreign keys.
-1. Heap or PK without identity.  Some tables have a PK but it's of a Code (varchar) or GUID, not managed by an auto-incrementing identity.
+1. Heap.  A table with no keys.  Example might be a history or archive of another table.
+1. PK without identity.  Some tables have a PK but it's of a Code (varchar) or GUID, not managed by an auto-incrementing identity.
 
 ## Local Env Setup
 

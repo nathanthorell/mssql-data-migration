@@ -63,3 +63,23 @@ def parse_identity(pk_list):
         if pk_info.get("Identity", False):
             return pk_info["PrimaryKeyName"]
     return None  # Return None if no identity primary key is found
+
+
+def get_column_data_type(conn, schema_name, table_name, column_name):
+    "Returns the data type of a tables column"
+    crsr = conn.cursor()
+
+    data_type_query = f"""
+        SELECT DATA_TYPE + CASE
+            WHEN CHARACTER_MAXIMUM_LENGTH IS NOT NULL
+            THEN '(' + CAST(CHARACTER_MAXIMUM_LENGTH AS VARCHAR) + ')'
+            ELSE '' END AS DATA_TYPE
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = '{schema_name}'
+            AND TABLE_NAME = '{table_name}'
+            AND COLUMN_NAME = '{column_name}'
+        """
+    crsr.execute(data_type_query)
+    data_type = crsr.fetchone()[0]
+
+    return data_type

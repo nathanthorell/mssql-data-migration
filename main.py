@@ -2,6 +2,36 @@ import json
 import os
 import utils
 import pyodbc
+from enum import Enum
+
+# Constants
+SCHEMA = "dbo"
+STAGE_SCHEMA = "STAGE"
+
+
+class TableType(Enum):
+    IDENTITY = "Identity"
+    UNIQUE = "Unique"
+    COMPOSITE = "Composite"
+    HEAP = "Heap"
+
+
+class Table:
+    def __init__(self, schema_name, stage_schema, table_name, type: TableType = None) -> None:
+        self.schema_name = schema_name
+        self.stage_schema = stage_schema
+        self.table_name = table_name
+        self.type = type
+
+    def update_type(self, type: TableType):
+        self.type = type
+
+    def __str__(self) -> str:
+        if self.type:
+            return f'Table: [{self.schema_name}].[{self.table_name}] Type: {self.type.name}'
+        else:
+            return f'Table: [{self.schema_name}].[{self.table_name}]'
+
 
 # Get directory of current script and construct paths for configs
 script_dir = os.path.dirname(__file__)
@@ -25,10 +55,6 @@ dest_conn = pyodbc.connect(dest_conn_string, autocommit=True)
 # Before starting loop ensure STAGE schema exists at Destination
 utils.create_stage_schema(conn=dest_conn)
 
-# Table Schema Constant
-SCHEMA = "dbo"
-STAGE_SCHEMA = "STAGE"
-
 # Loop through databases, waves, and tables
 dest_db = config["destination"]["database"]
 db_dict = [d for d in tables["databases"] if d["db_name"] == dest_db]
@@ -37,12 +63,11 @@ for wave in waves_list:
     print(f"Processing Wave # {wave['wave_num']}...")
     print("#####################################################")
     for table in wave["tables"]:
+        current_table = Table(SCHEMA, STAGE_SCHEMA, table)
+
         utils.create_stage_table(conn=dest_conn, table_name=table, recreate=True)
 
-        # Initialize this for later use during merge loop
-        composite_table = False
-
-        # Get table details for PK and columns
+        # Gather the table details
         current_pk_list = utils.get_primary_key(
             conn=dest_conn, schema_name=SCHEMA, table_name=table
         )
@@ -56,6 +81,20 @@ for wave in waves_list:
         column_list_without_pk = utils.get_column_list(
             conn=dest_conn, schema_name=SCHEMA, table_name=table, include_pk=False
         )
+        current_fks_list = utils.get_foreign_keys(
+            conn=dest_conn, schema_name=SCHEMA, table_name=table
+        )
+
+        # Check for table type and update current Table variables
+        if current_pk_list:
+            if has_identity:
+                current_table.update_type("IDENTITY")
+            elif current_fks_list in current_pk_list:
+                current_table.update_type("COMPOSITE")
+            else:
+                current_table.update_type("UNIQUE")
+        else:
+            current_table.update_type("HEAP")
 
         # Stage table setup for PK and FKs
         utils.create_stage_table_pk(
@@ -63,9 +102,6 @@ for wave in waves_list:
         )
         utils.create_stage_table_newpk(conn=dest_conn, table_name=table)
 
-        current_fks_list = utils.get_foreign_keys(
-            conn=dest_conn, schema_name=SCHEMA, table_name=table
-        )
         utils.create_stage_table_fks(
             conn=dest_conn,
             stage_schema=STAGE_SCHEMA,
@@ -84,22 +120,20 @@ for wave in waves_list:
             has_identity=has_identity,
         )
 
-        # Determine the type of table and call correct merge function
-        if current_pk_list:
-            if has_identity:
-                utils.merge_identity_table_data(
-                    conn=dest_conn,
-                    stage_schema=STAGE_SCHEMA,
-                    schema_name=SCHEMA,
-                    table_name=table,
-                    column_list=column_list_without_pk,
-                    uniques=unique_constraints,
-                    identity=has_identity,
-                )
-            else:
-                # This will be merged after the FKs are updated
-                composite_table = True
-        else:
+        # Call correct merge function based on TableType
+        if current_table.type == 'IDENTITY':
+            utils.merge_identity_table_data(
+                conn=dest_conn,
+                stage_schema=STAGE_SCHEMA,
+                schema_name=SCHEMA,
+                table_name=table,
+                column_list=column_list_without_pk,
+                uniques=unique_constraints,
+                identity=has_identity,
+            )
+        elif current_table.type == 'UNIQUE':
+            print("merge_unique_table_data")
+        elif current_table.type == 'HEAP':
             print("merge_heap_table_data")
 
         if current_fks_list:
@@ -111,7 +145,7 @@ for wave in waves_list:
             )
 
         # Now that fks are updated, if table is composite pk, merge
-        if composite_table:
+        if current_table.type == 'COMPOSITE':
             utils.merge_composite_table_data(
                 conn=dest_conn,
                 stage_schema=STAGE_SCHEMA,

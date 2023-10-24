@@ -1,3 +1,6 @@
+from utils.table_details import get_column_data_type
+
+
 def create_stage_schema(conn):
     "create stage schema if it doesnt exist"
     crsr = conn.cursor()
@@ -105,14 +108,12 @@ def create_stage_table_fks(conn, stage_schema, schema_name, table_name, foreign_
         column_name = fk["parent_column"]
 
         # Get the data type of the foreign key column
-        data_type_query = f"""
-            SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = '{schema_name}'
-                AND TABLE_NAME = '{table_name}'
-                AND COLUMN_NAME = '{column_name}'
-        """
-        crsr.execute(data_type_query)
-        data_type = crsr.fetchone()[0]
+        data_type = get_column_data_type(
+            conn=conn,
+            schema_name=schema_name,
+            table_name=table_name,
+            column_name=column_name,
+        )
 
         new_column_name = f"{new_column_prefix}{column_name}"
 

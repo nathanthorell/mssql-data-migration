@@ -1,15 +1,13 @@
+from utils.table_details import get_column_data_type
+
+
 def create_key_stage(conn, stage_schema, schema_name, table_name, identity):
     "create KeyStage table if it doesnt exist"
     crsr = conn.cursor()
 
-    get_identity_data_type_sql = f"""
-            SELECT DATA_TYPE
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = '{schema_name}'
-            AND TABLE_NAME = '{table_name}' AND COLUMN_NAME = '{identity}'
-        """
-    crsr.execute(get_identity_data_type_sql)
-    identity_data_type = crsr.fetchone()[0]
+    identity_data_type = get_column_data_type(
+        conn=conn, schema_name=schema_name, table_name=table_name, column_name=identity
+    )
 
     # Construct column names and data types for the staging table
     new_identity_column = f"New_{identity}"
