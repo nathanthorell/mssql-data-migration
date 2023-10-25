@@ -180,3 +180,43 @@ def merge_composite_table_data(
     crsr.execute(merge_query)
 
     crsr.close()
+
+
+def merge_unique_table_data(
+    conn, stage_schema, schema_name, table_name, column_list, pk_columns
+):
+    "Merge unique PK table data from stage into destination table"
+    print(f"Merging unique table: {table_name}")
+    crsr = conn.cursor()
+
+    columns = column_list.split(",")
+
+    # Construct the list of PK columns in the format:
+    # "source.column1 = target.column1 AND source.column2 = target.column2"
+    pk_conditions = []
+    values_columns = []
+    for pk_col in pk_columns:
+        col_name = pk_col["PrimaryKeyName"]
+        if col_name in columns:
+            pk_conditions.append(f"source.{col_name} = target.{col_name}")
+            values_columns.append(col_name)
+
+    pk_conditions = " AND ".join(pk_conditions)
+
+    # Construct the VALUES part
+    values_part = ", ".join(
+        f"source.{col}" if col in values_columns else f"source.{col}"
+        for col in columns
+    )
+
+    merge_query = f"""
+    MERGE INTO [{schema_name}].[{table_name}] AS target
+    USING [{stage_schema}].[{table_name}] AS source
+    ON {pk_conditions}
+    WHEN NOT MATCHED THEN
+        INSERT ({', '.join(columns)})
+        VALUES ({values_part});
+    """
+    crsr.execute(merge_query)
+
+    crsr.close()

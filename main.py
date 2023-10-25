@@ -30,7 +30,7 @@ class Table:
 
     def __str__(self) -> str:
         if self.type:
-            return f"Table: [{self.schema_name}].[{self.table_name}] Type: {self.type.name}"
+            return f"Table: [{self.schema_name}].[{self.table_name}] Type: {self.type}"
         else:
             return f"Table: [{self.schema_name}].[{self.table_name}]"
 
@@ -101,6 +101,7 @@ for wave in waves_list:
         else:
             current_table.update_type("HEAP")
 
+        print(current_table)
         # Stage table setup for PK and FKs
         utils.create_stage_table_pk(
             conn=dest_conn, table_name=table, pk_column_list=current_pk_list
@@ -137,7 +138,14 @@ for wave in waves_list:
                 identity=has_identity,
             )
         elif current_table.type == "UNIQUE":
-            print("merge_unique_table_data")
+            utils.merge_unique_table_data(
+                conn=dest_conn,
+                stage_schema=STAGE_SCHEMA,
+                schema_name=SCHEMA,
+                table_name=table,
+                column_list=full_column_list,
+                pk_columns=current_pk_list,
+            )
         elif current_table.type == "HEAP":
             print("merge_heap_table_data")
 

@@ -18,6 +18,7 @@ from .copy_data import (
     copy_src_table_to_stage,
     merge_identity_table_data,
     merge_composite_table_data,
+    merge_unique_table_data,
 )
 from .update_keys import create_key_stage, update_new_pk_in_stage, update_fks_in_stage
 
@@ -39,6 +40,7 @@ __all__ = [
     copy_src_table_to_stage,
     merge_identity_table_data,
     merge_composite_table_data,
+    merge_unique_table_data,
     create_key_stage,
     update_new_pk_in_stage,
     update_fks_in_stage,
