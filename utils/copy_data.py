@@ -205,8 +205,7 @@ def merge_unique_table_data(
 
     # Construct the VALUES part
     values_part = ", ".join(
-        f"source.{col}" if col in values_columns else f"source.{col}"
-        for col in columns
+        f"source.{col}" if col in values_columns else f"source.{col}" for col in columns
     )
 
     merge_query = f"""
@@ -218,5 +217,25 @@ def merge_unique_table_data(
         VALUES ({values_part});
     """
     crsr.execute(merge_query)
+
+    crsr.close()
+
+
+def merge_heap_table_data(
+    conn, stage_schema, schema_name, table_name, column_list, uniques, temporal
+):
+    "Merge heap table data from stage into destination table"
+    print(f"Merging heap table: {table_name}")
+    crsr = conn.cursor()
+
+    # The only way to merge heap data is if there's a unique constraint
+    if uniques:
+        print("This heap has uniques")
+
+    # If there are no uniques, then just straight insert all rows
+    else:
+        print("This heap has no unique constraints")
+
+    # TODO If temporal_type = HISTORY, treat master_table's PK as a FK in History to be updated accordingly
 
     crsr.close()

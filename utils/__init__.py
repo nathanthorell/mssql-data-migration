@@ -5,6 +5,8 @@ from .table_details import (
     parse_identity,
     get_column_data_type,
     is_pk_entirely_fks,
+    get_temporal_info,
+    change_temporal_state,
 )
 from .create_stage import (
     create_stage_schema,
@@ -19,6 +21,7 @@ from .copy_data import (
     merge_identity_table_data,
     merge_composite_table_data,
     merge_unique_table_data,
+    merge_heap_table_data,
 )
 from .update_keys import create_key_stage, update_new_pk_in_stage, update_fks_in_stage
 
@@ -29,6 +32,8 @@ __all__ = [
     parse_identity,
     get_column_data_type,
     is_pk_entirely_fks,
+    get_temporal_info,
+    change_temporal_state,
     create_stage_schema,
     create_stage_table,
     create_stage_table_fks,
@@ -41,6 +46,7 @@ __all__ = [
     merge_identity_table_data,
     merge_composite_table_data,
     merge_unique_table_data,
+    merge_heap_table_data,
     create_key_stage,
     update_new_pk_in_stage,
     update_fks_in_stage,

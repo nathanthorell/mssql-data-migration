@@ -2,6 +2,7 @@ import json
 import os
 import utils
 import pyodbc
+from time import gmtime, strftime
 from enum import Enum
 
 # Constants
@@ -63,6 +64,7 @@ db_dict = [d for d in tables["databases"] if d["db_name"] == dest_db]
 waves_list = [d["waves"] for d in db_dict][0]
 for wave in waves_list:
     print(f"Processing Wave # {wave['wave_num']}...")
+    print(strftime("%Y-%m-%d %H:%M:%S", gmtime()))
     print("#####################################################")
     for table in wave["tables"]:
         current_table = Table(SCHEMA, STAGE_SCHEMA, table)
@@ -89,6 +91,12 @@ for wave in waves_list:
         is_pk_composite = utils.is_pk_entirely_fks(
             pk_list=current_pk_list, fk_list=current_fks_list
         )
+        temporal_info = utils.get_temporal_info(
+            conn=dest_conn, schema_name=SCHEMA, table_name=table
+        )
+
+        if temporal_info:
+            temporal_type = temporal_info["temporal_type"]
 
         # Check for table type and update current Table variables
         if current_pk_list:
@@ -101,20 +109,21 @@ for wave in waves_list:
         else:
             current_table.update_type("HEAP")
 
-        print(current_table)
         # Stage table setup for PK and FKs
-        utils.create_stage_table_pk(
-            conn=dest_conn, table_name=table, pk_column_list=current_pk_list
-        )
-        utils.create_stage_table_newpk(conn=dest_conn, table_name=table)
+        if current_pk_list:
+            utils.create_stage_table_pk(
+                conn=dest_conn, table_name=table, pk_column_list=current_pk_list
+            )
+            utils.create_stage_table_newpk(conn=dest_conn, table_name=table)
 
-        utils.create_stage_table_fks(
-            conn=dest_conn,
-            stage_schema=STAGE_SCHEMA,
-            schema_name=SCHEMA,
-            table_name=table,
-            foreign_keys=current_fks_list,
-        )
+        if current_fks_list:
+            utils.create_stage_table_fks(
+                conn=dest_conn,
+                stage_schema=STAGE_SCHEMA,
+                schema_name=SCHEMA,
+                table_name=table,
+                foreign_keys=current_fks_list,
+            )
 
         utils.copy_src_table_to_stage(
             src_conn=src_conn,
@@ -125,6 +134,12 @@ for wave in waves_list:
             column_list=full_column_list,
             has_identity=has_identity,
         )
+
+        # Disable SYSTEM_VERSIONING in order to MERGE
+        if temporal_type in ["TEMPORAL", "HISTORY"]:
+            utils.change_temporal_state(
+                conn=dest_conn, temporal_info=temporal_info, state="OFF"
+            )
 
         # Call correct merge function based on TableType
         if current_table.type == "IDENTITY":
@@ -147,8 +162,23 @@ for wave in waves_list:
                 pk_columns=current_pk_list,
             )
         elif current_table.type == "HEAP":
-            print("merge_heap_table_data")
+            utils.merge_heap_table_data(
+                conn=dest_conn,
+                stage_schema=STAGE_SCHEMA,
+                schema_name=SCHEMA,
+                table_name=table,
+                column_list=full_column_list,
+                uniques=unique_constraints,
+                temporal=temporal_info,
+            )
 
+        # Re-Enable SYSTEM_VERSIONING after MERGE is finished
+        if temporal_type in ["TEMPORAL", "HISTORY"]:
+            utils.change_temporal_state(
+                conn=dest_conn, temporal_info=temporal_info, state="ON"
+            )
+
+        # After the table merge is complete update any FKs
         if current_fks_list:
             utils.update_fks_in_stage(
                 conn=dest_conn,
@@ -157,7 +187,7 @@ for wave in waves_list:
                 fks_list=current_fks_list,
             )
 
-        # Now that fks are updated, if table is composite pk, merge
+        # Now that FKs are updated, if TableType is Composite, then merge it's data
         if current_table.type == "COMPOSITE":
             utils.merge_composite_table_data(
                 conn=dest_conn,
