@@ -125,6 +125,25 @@ for wave in waves_list:
                 foreign_keys=current_fks_list,
             )
 
+        # If table is a Temporal History table, add keys in Stage
+        if temporal_type == "HISTORY":
+            combined_keys = utils.get_temporal_combined_keys(
+                conn=dest_conn, temporal_info=temporal_info
+            )
+            utils.create_stage_temporal_history_keys(
+                conn=dest_conn,
+                stage_schema=STAGE_SCHEMA,
+                table_name=table,
+                temporal_info=temporal_info,
+                combined_keys=combined_keys,
+            )
+
+        # Disable SYSTEM_VERSIONING in order to Process Temporal Tables
+        if temporal_type in ["TEMPORAL", "HISTORY"]:
+            utils.change_temporal_state(
+                conn=dest_conn, temporal_info=temporal_info, state="OFF"
+            )
+
         utils.copy_src_table_to_stage(
             src_conn=src_conn,
             dest_conn=dest_conn,
@@ -134,12 +153,6 @@ for wave in waves_list:
             column_list=full_column_list,
             has_identity=has_identity,
         )
-
-        # Disable SYSTEM_VERSIONING in order to MERGE
-        if temporal_type in ["TEMPORAL", "HISTORY"]:
-            utils.change_temporal_state(
-                conn=dest_conn, temporal_info=temporal_info, state="OFF"
-            )
 
         # Call correct merge function based on TableType
         if current_table.type == "IDENTITY":
@@ -161,21 +174,15 @@ for wave in waves_list:
                 column_list=full_column_list,
                 pk_columns=current_pk_list,
             )
-        elif current_table.type == "HEAP":
-            utils.merge_heap_table_data(
+
+        # If temporal_type = HISTORY, treat master_table's PK as a FK in History to be updated accordingly
+        # This must be done before re-enabling SYSTEM_VERSIONING
+        if temporal_type == "HISTORY":
+            utils.update_temporal_history_stage_keys(
                 conn=dest_conn,
                 stage_schema=STAGE_SCHEMA,
-                schema_name=SCHEMA,
                 table_name=table,
-                column_list=full_column_list,
-                uniques=unique_constraints,
-                temporal=temporal_info,
-            )
-
-        # Re-Enable SYSTEM_VERSIONING after MERGE is finished
-        if temporal_type in ["TEMPORAL", "HISTORY"]:
-            utils.change_temporal_state(
-                conn=dest_conn, temporal_info=temporal_info, state="ON"
+                key_list=combined_keys,
             )
 
         # After the table merge is complete update any FKs
@@ -187,7 +194,7 @@ for wave in waves_list:
                 fks_list=current_fks_list,
             )
 
-        # Now that FKs are updated, if TableType is Composite, then merge it's data
+        # Now that FKs are updated, merge data of remaining table types
         if current_table.type == "COMPOSITE":
             utils.merge_composite_table_data(
                 conn=dest_conn,
@@ -196,6 +203,30 @@ for wave in waves_list:
                 table_name=table,
                 column_list=full_column_list,
                 pk_columns=current_pk_list,
+            )
+        elif current_table.type == "HEAP" and temporal_type == "HISTORY":
+            utils.insert_temporal_history_table_data(
+                conn=dest_conn,
+                stage_schema=STAGE_SCHEMA,
+                schema_name=SCHEMA,
+                table_name=table,
+                column_list=full_column_list,
+                combined_keys=combined_keys,
+            )
+        elif current_table.type == "HEAP":
+            utils.merge_heap_table_data(
+                conn=dest_conn,
+                stage_schema=STAGE_SCHEMA,
+                schema_name=SCHEMA,
+                table_name=table,
+                column_list=full_column_list,
+                uniques=unique_constraints,
+            )
+
+        # Re-Enable SYSTEM_VERSIONING after MERGE is finished
+        if temporal_type in ["TEMPORAL", "HISTORY"]:
+            utils.change_temporal_state(
+                conn=dest_conn, temporal_info=temporal_info, state="ON"
             )
 
         print("")

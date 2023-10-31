@@ -222,11 +222,13 @@ def merge_unique_table_data(
 
 
 def merge_heap_table_data(
-    conn, stage_schema, schema_name, table_name, column_list, uniques, temporal
+    conn, stage_schema, schema_name, table_name, column_list, uniques
 ):
     "Merge heap table data from stage into destination table"
     print(f"Merging heap table: {table_name}")
     crsr = conn.cursor()
+
+    columns = column_list.split(",")
 
     # The only way to merge heap data is if there's a unique constraint
     if uniques:
@@ -234,8 +236,55 @@ def merge_heap_table_data(
 
     # If there are no uniques, then just straight insert all rows
     else:
-        print("This heap has no unique constraints")
+        insert_heap_query = f"""
+        INSERT INTO [{schema_name}].[{table_name}] ({', '.join(columns)})
+        SELECT {', '.join(columns)}
+        FROM [{stage_schema}].[{table_name}];
+        """
+        crsr.execute(insert_heap_query)
 
-    # TODO If temporal_type = HISTORY, treat master_table's PK as a FK in History to be updated accordingly
+    crsr.close()
+
+
+def insert_temporal_history_table_data(
+    conn,
+    stage_schema,
+    schema_name,
+    table_name,
+    column_list,
+    combined_keys,
+):
+    "Insert data from stage for a temporal history table data into destination table"
+    print(f"Inserting data for temporal history table table: [{table_name}]")
+    crsr = conn.cursor()
+
+    columns = column_list.split(",")
+
+    # Extract the "parent_column" values from combined_keys
+    combined_key_columns = [key['parent_column'] for key in combined_keys]
+
+    # Create a list to store the modified column names
+    modified_columns = []
+
+    # Iterate through the columns and modify them if needed
+    for column in columns:
+        # Check if the column needs modification
+        if column in combined_key_columns:
+            modified_columns.append(f"New_{column}")
+        else:
+            modified_columns.append(column)
+
+    # Join the modified column names into a comma-separated string
+    modified_column_list = ", ".join(modified_columns)
+
+    # Generate the SQL statement for the insert operation
+    insert_query = f"""
+    INSERT INTO [{schema_name}].[{table_name}] ({column_list})
+    SELECT {modified_column_list}
+    FROM [{stage_schema}].[{table_name}];
+    """
+
+    # Execute the insert query
+    crsr.execute(insert_query)
 
     crsr.close()

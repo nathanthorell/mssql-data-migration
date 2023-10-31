@@ -179,17 +179,13 @@ def change_temporal_state(conn, temporal_info, state):
     if state == "ON":
         # This works around the python datetime.datetime only pulling 6 digits of nanoseconds
         # Likely should fix and improve this later on
-        for schema, table in [
-            (master_schema, master_table),
-            (history_schema, history_table),
-        ]:
-            update_period_end = f"""
-            UPDATE [{schema}].[{table}]
-            SET {validity_period_end} = (
-                SELECT MAX({validity_period_end}) FROM [{schema}].[{table}]
-            );
-            """
-            crsr.execute(update_period_end)
+        update_period_end = f"""
+        UPDATE [{master_schema}].[{master_table}]
+        SET {validity_period_end} = (
+            SELECT MAX({validity_period_end}) FROM [{master_schema}].[{master_table}]
+        );
+        """
+        crsr.execute(update_period_end)
 
         # Before enabling SYSTEM_VERSIONING the PERIOD needs to be added back
         add_period_query = f"""

@@ -94,3 +94,41 @@ def get_uniques(conn, schema_name, table_name):
     crsr.close()
 
     return unique_constraints
+
+
+def get_temporal_combined_keys(conn, temporal_info):
+    temporal_master_schema = temporal_info["master_schema"]
+    temporal_master_table = temporal_info["master_table"]
+    temporal_history_table = temporal_info["history_table"]
+
+    temporal_pk = get_primary_key(
+        conn=conn, schema_name=temporal_master_schema, table_name=temporal_master_table
+    )
+    temporal_fks = get_foreign_keys(
+        conn=conn, schema_name=temporal_master_schema, table_name=temporal_master_table
+    )
+
+    # Add primary and foreign keys to the list of combined_keys
+    combined_keys = []
+    for pk in temporal_pk:
+        combined_keys.append(
+            {
+                "origin_key_type": "PrimaryKey",
+                "parent_table": temporal_history_table,
+                "parent_column": pk["PrimaryKeyName"],
+                "referenced_table": temporal_master_table,
+                "referenced_column": pk["PrimaryKeyName"],
+            }
+        )
+    for fk in temporal_fks:
+        combined_keys.append(
+            {
+                "origin_key_type": "ForeignKey",
+                "parent_table": fk["parent_column"],
+                "parent_column": fk["parent_column"],
+                "referenced_table": fk["referenced_table"],
+                "referenced_column": fk["referenced_column"],
+            }
+        )
+
+    return combined_keys

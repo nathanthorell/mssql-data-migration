@@ -72,3 +72,21 @@ def update_fks_in_stage(conn, stage_schema, table_name, fks_list):
         print(f"Updated Foreign Key [{fk['name']}]")
 
     crsr.close()
+
+
+def update_temporal_history_stage_keys(conn, stage_schema, table_name, key_list):
+    ""
+    crsr = conn.cursor()
+
+    for key in key_list:
+        update_query = f"""
+            UPDATE [{stage_schema}].[{table_name}]
+            SET New_{key['parent_column']} =
+            COALESCE(parent.New_{key['referenced_column']}, parent.{key['referenced_column']})
+            FROM [{stage_schema}].[{table_name}] stage
+            INNER JOIN [{stage_schema}].[{key['referenced_table']}] parent
+            ON stage.{key['parent_column']} = parent.{key['referenced_column']}
+        """
+        crsr.execute(update_query)
+
+    crsr.close()

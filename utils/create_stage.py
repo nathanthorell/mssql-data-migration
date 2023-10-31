@@ -146,3 +146,40 @@ def create_stage_table_fks(conn, stage_schema, schema_name, table_name, foreign_
             )
 
     crsr.close()
+
+
+def create_stage_temporal_history_keys(
+    conn, stage_schema, table_name, temporal_info, combined_keys
+):
+    "create new columns on stage table for a temporal history table based on it's masters pk and fks"
+    crsr = conn.cursor()
+
+    new_column_prefix = "New_"  # Prefix for the new columns
+
+    temporal_master_schema = temporal_info["master_schema"]
+    temporal_master_table = temporal_info["master_table"]
+
+    for key in combined_keys:
+        column_name = key["parent_column"]
+
+        # Get the data type of the key from the master table
+        data_type = get_column_data_type(
+            conn=conn,
+            schema_name=temporal_master_schema,
+            table_name=temporal_master_table,
+            column_name=column_name,
+        )
+
+        new_column_name = f"{new_column_prefix}{column_name}"
+
+        # Construct and execute the ALTER TABLE query for each new column
+        alter_query = f"""
+            ALTER TABLE [{stage_schema}].[{table_name}]
+            ADD [{new_column_name}] {data_type} NULL
+        """
+        crsr.execute(alter_query)
+        print(
+            f"New column '{new_column_name}' added to '[{stage_schema}].[{table_name}]', data type '{data_type}'."
+        )
+
+    crsr.close()
