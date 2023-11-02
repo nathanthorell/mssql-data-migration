@@ -1,3 +1,4 @@
+from .Table import Table
 from .get_conns import get_conn_string
 from .table_details import (
     get_column_list,
@@ -38,6 +39,7 @@ from .update_keys import (
 )
 
 __all__ = [
+    Table,
     get_conn_string,
     get_column_list,
     get_identity,

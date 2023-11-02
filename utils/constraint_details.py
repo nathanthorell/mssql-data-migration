@@ -1,4 +1,7 @@
-def get_primary_key(conn, schema_name, table_name):
+from utils.Table import Table
+
+
+def get_primary_key(conn, table: Table):
     "query the table and return an object of the primary key"
     crsr = conn.cursor()
 
@@ -8,8 +11,8 @@ def get_primary_key(conn, schema_name, table_name):
     FROM sys.key_constraints kc
     INNER JOIN sys.index_columns ic ON kc.parent_object_id = ic.object_id  and kc.unique_index_id = ic.index_id
     INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
-    WHERE kc.type = 'PK' AND OBJECT_SCHEMA_NAME(kc.parent_object_id) = '{schema_name}'
-    AND OBJECT_NAME(kc.parent_object_id) = '{table_name}'
+    WHERE kc.type = 'PK' AND OBJECT_SCHEMA_NAME(kc.parent_object_id) = '{table.schema_name}'
+    AND OBJECT_NAME(kc.parent_object_id) = '{table.table_name}'
     """
 
     crsr.execute(pk_query)
@@ -22,7 +25,7 @@ def get_primary_key(conn, schema_name, table_name):
     return result_list
 
 
-def get_foreign_keys(conn, schema_name, table_name):
+def get_foreign_keys(conn, table: Table):
     crsr = conn.cursor()
 
     foreign_keys_query = f"""
@@ -38,8 +41,8 @@ def get_foreign_keys(conn, schema_name, table_name):
         AND FKC.parent_object_id = C.object_id
     JOIN sys.columns AS CR ON FKC.referenced_column_id = CR.column_id
         AND FKC.referenced_object_id = CR.object_id
-    WHERE OBJECT_SCHEMA_NAME(FK.parent_object_id) = '{schema_name}'
-        AND OBJECT_NAME(FK.parent_object_id) = '{table_name}'
+    WHERE OBJECT_SCHEMA_NAME(FK.parent_object_id) = '{table.schema_name}'
+        AND OBJECT_NAME(FK.parent_object_id) = '{table.table_name}'
     ORDER BY foreign_key_name;
     """
 
@@ -61,7 +64,7 @@ def get_foreign_keys(conn, schema_name, table_name):
     return foreign_keys
 
 
-def get_uniques(conn, schema_name, table_name):
+def get_uniques(conn, table: Table):
     "Gets any UNIQUE constraints from the table"
     crsr = conn.cursor()
 
@@ -73,8 +76,8 @@ def get_uniques(conn, schema_name, table_name):
     JOIN sys.columns AS c ON ic.object_id = c.object_id
             AND ic.column_id = c.column_id
     WHERE i.is_unique = 1
-        AND OBJECT_SCHEMA_NAME(i.object_id) = '{schema_name}'
-        AND OBJECT_NAME(i.object_id) = '{table_name}'
+        AND OBJECT_SCHEMA_NAME(i.object_id) = '{table.schema_name}'
+        AND OBJECT_NAME(i.object_id) = '{table.table_name}'
     ORDER BY constraint_name, column_name;
     """
     crsr.execute(unique_constraints_query)
@@ -85,7 +88,7 @@ def get_uniques(conn, schema_name, table_name):
         column_name = row.column_name
 
         # Exclude constraints that match the primary key
-        primary_key_columns = get_primary_key(conn, schema_name, table_name)
+        primary_key_columns = get_primary_key(conn=conn, table=table)
         if column_name not in primary_key_columns:
             if constraint_name not in unique_constraints:
                 unique_constraints[constraint_name] = []
@@ -96,17 +99,19 @@ def get_uniques(conn, schema_name, table_name):
     return unique_constraints
 
 
-def get_temporal_combined_keys(conn, temporal_info):
+def get_temporal_combined_keys(conn, stage_schema, temporal_info):
     temporal_master_schema = temporal_info["master_schema"]
     temporal_master_table = temporal_info["master_table"]
     temporal_history_table = temporal_info["history_table"]
 
-    temporal_pk = get_primary_key(
-        conn=conn, schema_name=temporal_master_schema, table_name=temporal_master_table
+    master_table = Table(
+        schema_name=temporal_master_schema,
+        stage_schema=stage_schema,
+        table_name=temporal_master_table,
     )
-    temporal_fks = get_foreign_keys(
-        conn=conn, schema_name=temporal_master_schema, table_name=temporal_master_table
-    )
+
+    temporal_pk = get_primary_key(conn=conn, table=master_table)
+    temporal_fks = get_foreign_keys(conn=conn, table=master_table)
 
     # Add primary and foreign keys to the list of combined_keys
     combined_keys = []

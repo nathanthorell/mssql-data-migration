@@ -3,38 +3,10 @@ import os
 import utils
 import pyodbc
 from time import gmtime, strftime
-from enum import Enum
 
 # Constants
 SCHEMA = "dbo"
 STAGE_SCHEMA = "STAGE"
-
-
-class TableType(Enum):
-    IDENTITY = "Identity"
-    UNIQUE = "Unique"
-    COMPOSITE = "Composite"
-    HEAP = "Heap"
-
-
-class Table:
-    def __init__(
-        self, schema_name, stage_schema, table_name, type: TableType = None
-    ) -> None:
-        self.schema_name = schema_name
-        self.stage_schema = stage_schema
-        self.table_name = table_name
-        self.type = type
-
-    def update_type(self, type: TableType):
-        self.type = type
-
-    def __str__(self) -> str:
-        if self.type:
-            return f"Table: [{self.schema_name}].[{self.table_name}] Type: {self.type}"
-        else:
-            return f"Table: [{self.schema_name}].[{self.table_name}]"
-
 
 # Get directory of current script and construct paths for configs
 script_dir = os.path.dirname(__file__)
@@ -67,33 +39,23 @@ for wave in waves_list:
     print(strftime("%Y-%m-%d %H:%M:%S", gmtime()))
     print("#####################################################")
     for table in wave["tables"]:
-        current_table = Table(SCHEMA, STAGE_SCHEMA, table)
+        current_table = utils.Table(SCHEMA, STAGE_SCHEMA, table)
 
-        utils.create_stage_table(conn=dest_conn, table_name=table, recreate=True)
+        utils.create_stage_table(conn=dest_conn, table=current_table, recreate=True)
 
         # Gather the table details
-        current_pk_list = utils.get_primary_key(
-            conn=dest_conn, schema_name=SCHEMA, table_name=table
-        )
+        current_pk_list = utils.get_primary_key(conn=dest_conn, table=current_table)
         has_identity = utils.parse_identity(current_pk_list)
-        full_column_list = utils.get_column_list(
-            conn=dest_conn, schema_name=SCHEMA, table_name=table
-        )
-        unique_constraints = utils.get_uniques(
-            conn=dest_conn, schema_name=SCHEMA, table_name=table
-        )
+        full_column_list = utils.get_column_list(conn=dest_conn, table=current_table)
+        unique_constraints = utils.get_uniques(conn=dest_conn, table=current_table)
         column_list_without_pk = utils.get_column_list(
-            conn=dest_conn, schema_name=SCHEMA, table_name=table, include_pk=False
+            conn=dest_conn, table=current_table, include_pk=False
         )
-        current_fks_list = utils.get_foreign_keys(
-            conn=dest_conn, schema_name=SCHEMA, table_name=table
-        )
+        current_fks_list = utils.get_foreign_keys(conn=dest_conn, table=current_table)
         is_pk_composite = utils.is_pk_entirely_fks(
             pk_list=current_pk_list, fk_list=current_fks_list
         )
-        temporal_info = utils.get_temporal_info(
-            conn=dest_conn, schema_name=SCHEMA, table_name=table
-        )
+        temporal_info = utils.get_temporal_info(conn=dest_conn, table=current_table)
 
         if temporal_info:
             temporal_type = temporal_info["temporal_type"]
@@ -112,28 +74,23 @@ for wave in waves_list:
         # Stage table setup for PK and FKs
         if current_pk_list:
             utils.create_stage_table_pk(
-                conn=dest_conn, table_name=table, pk_column_list=current_pk_list
+                conn=dest_conn, table=current_table, pk_column_list=current_pk_list
             )
-            utils.create_stage_table_newpk(conn=dest_conn, table_name=table)
+            utils.create_stage_table_newpk(conn=dest_conn, table=current_table)
 
         if current_fks_list:
             utils.create_stage_table_fks(
-                conn=dest_conn,
-                stage_schema=STAGE_SCHEMA,
-                schema_name=SCHEMA,
-                table_name=table,
-                foreign_keys=current_fks_list,
+                conn=dest_conn, table=current_table, foreign_keys=current_fks_list
             )
 
         # If table is a Temporal History table, add keys in Stage
         if temporal_type == "HISTORY":
             combined_keys = utils.get_temporal_combined_keys(
-                conn=dest_conn, temporal_info=temporal_info
+                conn=dest_conn, stage_schema=STAGE_SCHEMA, temporal_info=temporal_info
             )
             utils.create_stage_temporal_history_keys(
                 conn=dest_conn,
-                stage_schema=STAGE_SCHEMA,
-                table_name=table,
+                table=current_table,
                 temporal_info=temporal_info,
                 combined_keys=combined_keys,
             )
@@ -147,9 +104,7 @@ for wave in waves_list:
         utils.copy_src_table_to_stage(
             src_conn=src_conn,
             dest_conn=dest_conn,
-            stage_schema=STAGE_SCHEMA,
-            schema_name=SCHEMA,
-            table_name=table,
+            table=current_table,
             column_list=full_column_list,
             has_identity=has_identity,
         )
@@ -158,9 +113,7 @@ for wave in waves_list:
         if current_table.type == "IDENTITY":
             utils.merge_identity_table_data(
                 conn=dest_conn,
-                stage_schema=STAGE_SCHEMA,
-                schema_name=SCHEMA,
-                table_name=table,
+                table=current_table,
                 column_list=column_list_without_pk,
                 uniques=unique_constraints,
                 identity=has_identity,
@@ -168,9 +121,7 @@ for wave in waves_list:
         elif current_table.type == "UNIQUE":
             utils.merge_unique_table_data(
                 conn=dest_conn,
-                stage_schema=STAGE_SCHEMA,
-                schema_name=SCHEMA,
-                table_name=table,
+                table=current_table,
                 column_list=full_column_list,
                 pk_columns=current_pk_list,
             )
@@ -179,46 +130,34 @@ for wave in waves_list:
         # This must be done before re-enabling SYSTEM_VERSIONING
         if temporal_type == "HISTORY":
             utils.update_temporal_history_stage_keys(
-                conn=dest_conn,
-                stage_schema=STAGE_SCHEMA,
-                table_name=table,
-                key_list=combined_keys,
+                conn=dest_conn, table=current_table, key_list=combined_keys
             )
 
         # After the table merge is complete update any FKs
         if current_fks_list:
             utils.update_fks_in_stage(
-                conn=dest_conn,
-                stage_schema=STAGE_SCHEMA,
-                table_name=table,
-                fks_list=current_fks_list,
+                conn=dest_conn, table=current_table, fks_list=current_fks_list
             )
 
         # Now that FKs are updated, merge data of remaining table types
         if current_table.type == "COMPOSITE":
             utils.merge_composite_table_data(
                 conn=dest_conn,
-                stage_schema=STAGE_SCHEMA,
-                schema_name=SCHEMA,
-                table_name=table,
+                table=current_table,
                 column_list=full_column_list,
                 pk_columns=current_pk_list,
             )
         elif current_table.type == "HEAP" and temporal_type == "HISTORY":
             utils.insert_temporal_history_table_data(
                 conn=dest_conn,
-                stage_schema=STAGE_SCHEMA,
-                schema_name=SCHEMA,
-                table_name=table,
+                table=current_table,
                 column_list=full_column_list,
                 combined_keys=combined_keys,
             )
         elif current_table.type == "HEAP":
             utils.merge_heap_table_data(
                 conn=dest_conn,
-                stage_schema=STAGE_SCHEMA,
-                schema_name=SCHEMA,
-                table_name=table,
+                table=current_table,
                 column_list=full_column_list,
                 uniques=unique_constraints,
             )
