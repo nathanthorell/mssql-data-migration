@@ -6,21 +6,19 @@ def copy_src_table_to_stage(
     src_conn,
     dest_conn,
     table: Table,
-    column_list,
-    has_identity=True,
 ):
     "copy a tables data from src_conn to dest_conn in stage schema"
     src_crsr = src_conn.cursor()
 
     print(f"Starting source to stage table copy of [{table.table_name}]...")
 
-    placeholders = ",".join(["?" for _ in column_list.split(",")])
+    placeholders = ",".join(["?" for _ in table.column_list.split(",")])
 
     quoted_stage_name = table.quoted_stage_name()
     quoted_full_name = table.quoted_full_name()
 
     # Get table data
-    get_data_sql = f"SELECT {column_list} FROM {quoted_full_name}"
+    get_data_sql = f"SELECT {table.column_list} FROM {quoted_full_name}"
     src_crsr.execute(get_data_sql)
     records = src_crsr.fetchall()
 
@@ -29,18 +27,20 @@ def copy_src_table_to_stage(
     dest_crsr = dest_conn.cursor()
 
     # Insert records into STAGE table
-    if has_identity:
+    if table.identity:
         dest_crsr.execute(f"SET IDENTITY_INSERT {quoted_stage_name} ON")
     dest_crsr.fast_executemany = True
-    sql = f"INSERT INTO {quoted_stage_name} ({column_list}) VALUES ({placeholders})"
+    sql = (
+        f"INSERT INTO {quoted_stage_name} ({table.column_list}) VALUES ({placeholders})"
+    )
     dest_crsr.executemany(sql, records)
-    if has_identity:
+    if table.identity:
         dest_crsr.execute(f"SET IDENTITY_INSERT {quoted_stage_name} OFF")
 
     dest_crsr.close()
 
 
-def merge_identity_table_data(conn, table: Table, column_list, uniques, identity):
+def merge_identity_table_data(conn, table: Table, column_list):
     "take data from stage and insert it into destination tables returning PK values to stage"
     crsr = conn.cursor()
 
@@ -52,15 +52,14 @@ def merge_identity_table_data(conn, table: Table, column_list, uniques, identity
     new_identity_column, source_identity_column = create_key_stage(
         conn=conn,
         table=table,
-        identity=identity,
     )
 
     # build the WHEN condition based on uniques
-    if uniques:
+    if table.uniques:
         when_conditions = []
-        for constraint_name, uq_columns in uniques.items():
+        for constraint_name, uq_columns in table.uniques.items():
             # The PK is technically a UNIQUE constraint, but we need to ignore it
-            if not all(column in identity for column in uq_columns):
+            if not all(column in table.identity for column in uq_columns):
                 # Create a list of conditions for each column in the unique constraint
                 column_conditions = []
                 for col in uq_columns:
@@ -99,7 +98,7 @@ def merge_identity_table_data(conn, table: Table, column_list, uniques, identity
     {when_condition} THEN
         INSERT ({', '.join(columns)})
         VALUES ({', '.join('source.' + col for col in columns)})
-    OUTPUT inserted.{identity} AS [{new_identity_column}], source.{identity} AS [{source_identity_column}]
+    OUTPUT inserted.{table.identity} AS [{new_identity_column}], source.{table.identity} AS [{source_identity_column}]
     INTO [{table.stage_schema}].[KeyStage];
     """
     crsr.execute(merge_query)
@@ -113,7 +112,7 @@ def merge_identity_table_data(conn, table: Table, column_list, uniques, identity
 
     # Fetch the results into Python variables
     key_arrays = {
-        "column_name": identity,
+        "column_name": table.identity,
         "inserted_identity_values": [],
         "source_identity_values": [],
     }
@@ -134,20 +133,20 @@ def merge_identity_table_data(conn, table: Table, column_list, uniques, identity
     # TODO: There's probably a better way to do this, might fix later
     unique_null_pks_sql = f"""
     UPDATE {quoted_stage_name}
-    SET New_{identity} = {identity}
-    WHERE New_{identity} IS NULL
+    SET New_{table.identity} = {table.identity}
+    WHERE New_{table.identity} IS NULL
     """
     crsr.execute(unique_null_pks_sql)
 
     crsr.close()
 
 
-def merge_composite_table_data(conn, table: Table, column_list, pk_columns):
+def merge_composite_table_data(conn, table: Table):
     "take composite pk data from stage and insert it into destination table"
     print(f"Merging composite table: {table.table_name}")
     crsr = conn.cursor()
 
-    columns = column_list.split(",")
+    columns = table.column_list.split(",")
 
     quoted_stage_name = table.quoted_stage_name()
     quoted_full_name = table.quoted_full_name()
@@ -156,7 +155,7 @@ def merge_composite_table_data(conn, table: Table, column_list, pk_columns):
     # "source.New_column1 = target.column1 AND source.New_column2 = target.column2"
     pk_conditions = []
     values_columns = []
-    for pk_col in pk_columns:
+    for pk_col in table.pk_column_list:
         col_name = pk_col["PrimaryKeyName"]
         if col_name in columns:
             pk_conditions.append(f"source.New_{col_name} = target.{col_name}")
@@ -183,7 +182,7 @@ def merge_composite_table_data(conn, table: Table, column_list, pk_columns):
     crsr.close()
 
 
-def merge_unique_table_data(conn, table: Table, column_list, pk_columns):
+def merge_unique_table_data(conn, table: Table):
     "Merge unique PK table data from stage into destination table"
     print(f"Merging unique table: {table.table_name}")
     crsr = conn.cursor()
@@ -191,13 +190,13 @@ def merge_unique_table_data(conn, table: Table, column_list, pk_columns):
     quoted_stage_name = table.quoted_stage_name()
     quoted_full_name = table.quoted_full_name()
 
-    columns = column_list.split(",")
+    columns = table.column_list.split(",")
 
     # Construct the list of PK columns in the format:
     # "source.column1 = target.column1 AND source.column2 = target.column2"
     pk_conditions = []
     values_columns = []
-    for pk_col in pk_columns:
+    for pk_col in table.pk_column_list:
         col_name = pk_col["PrimaryKeyName"]
         if col_name in columns:
             pk_conditions.append(f"source.{col_name} = target.{col_name}")
@@ -223,7 +222,7 @@ def merge_unique_table_data(conn, table: Table, column_list, pk_columns):
     crsr.close()
 
 
-def merge_heap_table_data(conn, table: Table, column_list, uniques):
+def merge_heap_table_data(conn, table: Table):
     "Merge heap table data from stage into destination table"
     print(f"Merging heap table: {table.table_name}")
     crsr = conn.cursor()
@@ -231,10 +230,10 @@ def merge_heap_table_data(conn, table: Table, column_list, uniques):
     quoted_stage_name = table.quoted_stage_name()
     quoted_full_name = table.quoted_full_name()
 
-    columns = column_list.split(",")
+    columns = table.column_list.split(",")
 
     # The only way to merge heap data is if there's a unique constraint
-    if uniques:
+    if table.uniques:
         print("This heap has uniques")
 
     # If there are no uniques, then just straight insert all rows
@@ -249,7 +248,7 @@ def merge_heap_table_data(conn, table: Table, column_list, uniques):
     crsr.close()
 
 
-def insert_temporal_history_table_data(conn, table: Table, column_list, combined_keys):
+def insert_temporal_history_table_data(conn, table: Table, combined_keys):
     "Insert data from stage for a temporal history table data into destination table"
     print(f"Inserting data for temporal history table table: [{table.table_name}]")
     crsr = conn.cursor()
@@ -257,7 +256,7 @@ def insert_temporal_history_table_data(conn, table: Table, column_list, combined
     quoted_stage_name = table.quoted_stage_name()
     quoted_full_name = table.quoted_full_name()
 
-    columns = column_list.split(",")
+    columns = table.column_list.split(",")
 
     # Extract the "parent_column" values from combined_keys
     combined_key_columns = [key["parent_column"] for key in combined_keys]
@@ -278,7 +277,7 @@ def insert_temporal_history_table_data(conn, table: Table, column_list, combined
 
     # Generate the SQL statement for the insert operation
     insert_query = f"""
-    INSERT INTO {quoted_full_name} ({column_list})
+    INSERT INTO {quoted_full_name} ({table.column_list})
     SELECT {modified_column_list}
     FROM {quoted_stage_name};
     """

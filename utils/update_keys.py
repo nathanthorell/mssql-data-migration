@@ -2,17 +2,17 @@ from utils.table_details import get_column_data_type
 from utils.Table import Table
 
 
-def create_key_stage(conn, table: Table, identity):
+def create_key_stage(conn, table: Table):
     "create KeyStage table if it doesnt exist"
     crsr = conn.cursor()
 
     identity_data_type = get_column_data_type(
-        conn=conn, table=table, column_name=identity
+        conn=conn, table=table, column_name=table.identity
     )
 
     # Construct column names and data types for the staging table
-    new_identity_column = f"New_{identity}"
-    source_identity_column = f"Source_{identity}"
+    new_identity_column = f"New_{table.identity}"
+    source_identity_column = f"Source_{table.identity}"
 
     # Clean up the staging table if needed
     cleanup_staging_table_sql = f"""
@@ -55,13 +55,13 @@ def update_new_pk_in_stage(conn, table: Table, key_arrays):
     crsr.close()
 
 
-def update_fks_in_stage(conn, table: Table, fks_list):
+def update_fks_in_stage(conn, table: Table):
     """"""
     crsr = conn.cursor()
 
     quoted_stage_name = table.quoted_stage_name()
 
-    for fk in fks_list:
+    for fk in table.fk_column_list:
         update_query = f"""
             UPDATE {quoted_stage_name}
             SET New_{fk['parent_column']} =

@@ -44,16 +44,21 @@ for wave in waves_list:
         utils.create_stage_table(conn=dest_conn, table=current_table, recreate=True)
 
         # Gather the table details
-        current_pk_list = utils.get_primary_key(conn=dest_conn, table=current_table)
-        has_identity = utils.parse_identity(current_pk_list)
-        full_column_list = utils.get_column_list(conn=dest_conn, table=current_table)
-        unique_constraints = utils.get_uniques(conn=dest_conn, table=current_table)
+        current_table.pk_column_list = utils.get_primary_key(
+            conn=dest_conn, table=current_table
+        )
+        current_table.fk_column_list = utils.get_foreign_keys(
+            conn=dest_conn, table=current_table
+        )
+        current_table.uniques = utils.get_uniques(conn=dest_conn, table=current_table)
+        current_table.column_list = utils.get_column_list(
+            conn=dest_conn, table=current_table
+        )
+        current_table.parse_identity()
+
+        is_pk_composite = current_table.is_pk_entirely_fks()
         column_list_without_pk = utils.get_column_list(
             conn=dest_conn, table=current_table, include_pk=False
-        )
-        current_fks_list = utils.get_foreign_keys(conn=dest_conn, table=current_table)
-        is_pk_composite = utils.is_pk_entirely_fks(
-            pk_list=current_pk_list, fk_list=current_fks_list
         )
         temporal_info = utils.get_temporal_info(conn=dest_conn, table=current_table)
 
@@ -61,8 +66,8 @@ for wave in waves_list:
             temporal_type = temporal_info["temporal_type"]
 
         # Check for table type and update current Table variables
-        if current_pk_list:
-            if has_identity:
+        if current_table.pk_column_list:
+            if current_table.identity:
                 current_table.update_type("IDENTITY")
             elif is_pk_composite:
                 current_table.update_type("COMPOSITE")
@@ -72,16 +77,12 @@ for wave in waves_list:
             current_table.update_type("HEAP")
 
         # Stage table setup for PK and FKs
-        if current_pk_list:
-            utils.create_stage_table_pk(
-                conn=dest_conn, table=current_table, pk_column_list=current_pk_list
-            )
+        if current_table.pk_column_list:
+            utils.create_stage_table_pk(conn=dest_conn, table=current_table)
             utils.create_stage_table_newpk(conn=dest_conn, table=current_table)
 
-        if current_fks_list:
-            utils.create_stage_table_fks(
-                conn=dest_conn, table=current_table, foreign_keys=current_fks_list
-            )
+        if current_table.fk_column_list:
+            utils.create_stage_table_fks(conn=dest_conn, table=current_table)
 
         # If table is a Temporal History table, add keys in Stage
         if temporal_type == "HISTORY":
@@ -105,8 +106,6 @@ for wave in waves_list:
             src_conn=src_conn,
             dest_conn=dest_conn,
             table=current_table,
-            column_list=full_column_list,
-            has_identity=has_identity,
         )
 
         # Call correct merge function based on TableType
@@ -115,16 +114,9 @@ for wave in waves_list:
                 conn=dest_conn,
                 table=current_table,
                 column_list=column_list_without_pk,
-                uniques=unique_constraints,
-                identity=has_identity,
             )
         elif current_table.type == "UNIQUE":
-            utils.merge_unique_table_data(
-                conn=dest_conn,
-                table=current_table,
-                column_list=full_column_list,
-                pk_columns=current_pk_list,
-            )
+            utils.merge_unique_table_data(conn=dest_conn, table=current_table)
 
         # If temporal_type = HISTORY, treat master_table's PK as a FK in History to be updated accordingly
         # This must be done before re-enabling SYSTEM_VERSIONING
@@ -134,33 +126,20 @@ for wave in waves_list:
             )
 
         # After the table merge is complete update any FKs
-        if current_fks_list:
-            utils.update_fks_in_stage(
-                conn=dest_conn, table=current_table, fks_list=current_fks_list
-            )
+        if current_table.fk_column_list:
+            utils.update_fks_in_stage(conn=dest_conn, table=current_table)
 
         # Now that FKs are updated, merge data of remaining table types
         if current_table.type == "COMPOSITE":
-            utils.merge_composite_table_data(
-                conn=dest_conn,
-                table=current_table,
-                column_list=full_column_list,
-                pk_columns=current_pk_list,
-            )
+            utils.merge_composite_table_data(conn=dest_conn, table=current_table)
         elif current_table.type == "HEAP" and temporal_type == "HISTORY":
             utils.insert_temporal_history_table_data(
                 conn=dest_conn,
                 table=current_table,
-                column_list=full_column_list,
                 combined_keys=combined_keys,
             )
         elif current_table.type == "HEAP":
-            utils.merge_heap_table_data(
-                conn=dest_conn,
-                table=current_table,
-                column_list=full_column_list,
-                uniques=unique_constraints,
-            )
+            utils.merge_heap_table_data(conn=dest_conn, table=current_table)
 
         # Re-Enable SYSTEM_VERSIONING after MERGE is finished
         if temporal_type in ["TEMPORAL", "HISTORY"]:

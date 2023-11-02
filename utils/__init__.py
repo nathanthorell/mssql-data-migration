@@ -3,9 +3,7 @@ from .get_conns import get_conn_string
 from .table_details import (
     get_column_list,
     get_identity,
-    parse_identity,
     get_column_data_type,
-    is_pk_entirely_fks,
     get_temporal_info,
     change_temporal_state,
 )
@@ -43,9 +41,7 @@ __all__ = [
     get_conn_string,
     get_column_list,
     get_identity,
-    parse_identity,
     get_column_data_type,
-    is_pk_entirely_fks,
     get_temporal_info,
     change_temporal_state,
     create_stage_schema,

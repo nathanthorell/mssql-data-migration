@@ -51,14 +51,14 @@ def create_stage_table(conn, table: Table, recreate=False):
     crsr.close()
 
 
-def create_stage_table_pk(conn, table: Table, pk_column_list):
+def create_stage_table_pk(conn, table: Table):
     "create the same PK on the stage table"
     crsr = conn.cursor()
 
     quoted_stage_name = table.quoted_stage_name()
     table_name = table.table_name
 
-    pk_columns = ", ".join(item["PrimaryKeyName"] for item in pk_column_list)
+    pk_columns = ", ".join(item["PrimaryKeyName"] for item in table.pk_column_list)
     create_pk_query = f"""
     ALTER TABLE {quoted_stage_name} ADD CONSTRAINT PK_STAGE_{table_name}
     PRIMARY KEY ({pk_columns})
@@ -112,7 +112,7 @@ def create_stage_table_newpk(conn, table: Table):
     crsr.close()
 
 
-def create_stage_table_fks(conn, table: Table, foreign_keys):
+def create_stage_table_fks(conn, table: Table):
     "create new columns on stage table for the fk columns"
     crsr = conn.cursor()
 
@@ -120,7 +120,7 @@ def create_stage_table_fks(conn, table: Table, foreign_keys):
 
     new_column_prefix = "New_"  # Prefix for the new columns
 
-    for fk in foreign_keys:
+    for fk in table.fk_column_list:
         column_name = fk["parent_column"]
 
         # Get the data type of the foreign key column

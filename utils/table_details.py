@@ -60,14 +60,6 @@ def get_identity(conn, schema_name, table_name):
     return has_identity
 
 
-def parse_identity(pk_list):
-    "Takes a list of PKs and parses out the Identity column"
-    for pk_info in pk_list:
-        if pk_info.get("Identity", False):
-            return pk_info["PrimaryKeyName"]
-    return None  # Return None if no identity primary key is found
-
-
 def get_column_data_type(conn, table: Table, column_name):
     "Returns the data type of a tables column"
     crsr = conn.cursor()
@@ -87,15 +79,6 @@ def get_column_data_type(conn, table: Table, column_name):
 
     crsr.close()
     return data_type
-
-
-def is_pk_entirely_fks(pk_list, fk_list):
-    # Extract the column names from the PK and FK lists
-    pk_columns = [pk["PrimaryKeyName"] for pk in pk_list]
-    fk_columns = [(fk["parent_table"], fk["parent_column"]) for fk in fk_list]
-
-    # Check if all PK columns are in the list of FK columns
-    return set(pk_columns).issubset(set(col[1] for col in fk_columns))
 
 
 def get_temporal_info(conn, table: Table):
