@@ -2,7 +2,7 @@ from utils.Table import Table
 
 
 def get_column_list(conn, table: Table, include_pk=True):
-    """get strings of columns from a table"""
+    """get an ordered list of columns from a table"""
     crsr = conn.cursor()
 
     if include_pk:
@@ -29,12 +29,57 @@ def get_column_list(conn, table: Table, include_pk=True):
     result = crsr.fetchone()
 
     if result.ColumnList is not None:
-        column_list = result.ColumnList.rstrip(",")
+        columns_str = result.ColumnList.rstrip(",")
     else:
-        column_list = ""
+        columns_str = ""
+
+    # Remove any whitespace (spaces and tabs) from the string then convert to list
+    columns_str = columns_str.replace(" ", "").replace("\t", "")
+    column_list = columns_str.split(",")
 
     crsr.close()
     return column_list
+
+
+def columns_with_new_keys(table: Table, include_pk):
+    """Takes the column_list and the combined_keys list and returns
+    a column_list with the updated column names"""
+    key_columns = []
+    pk_columns = []
+
+    # Extract primary key columns
+    for pk in table.pk_column_list:
+        pk_columns.append(pk["PrimaryKeyName"])
+
+    # Always extract foreign key columns
+    for fk in table.fk_column_list:
+        key_columns.append(fk["parent_column"])
+
+    # Add pk_columns into key_columns if include_pk is True
+    if include_pk:
+        for column in pk_columns:
+            key_columns.append(column)
+
+    # Create a list to store the modified column names
+    modified_columns = []
+
+    column_list_without_pk = [col for col in table.column_list if col not in pk_columns]
+
+    # Iterate through the column_list and modify column names if necessary
+    if include_pk:
+        for column in table.column_list:
+            if column in key_columns:
+                modified_columns.append(f"New_{column}")
+            else:
+                modified_columns.append(column)
+    else:
+        for column in column_list_without_pk:
+            if column in key_columns:
+                modified_columns.append(f"New_{column}")
+            else:
+                modified_columns.append(column)
+
+    return modified_columns
 
 
 def get_identity(conn, schema_name, table_name):

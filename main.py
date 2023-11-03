@@ -54,12 +54,18 @@ for wave in waves_list:
         current_table.column_list = utils.get_column_list(
             conn=dest_conn, table=current_table
         )
-        current_table.parse_identity()
-
-        is_pk_composite = current_table.is_pk_entirely_fks()
-        column_list_without_pk = utils.get_column_list(
+        current_table.column_list_without_pk = utils.get_column_list(
             conn=dest_conn, table=current_table, include_pk=False
         )
+        current_table.parse_identity()
+        current_table.column_list_with_new_keys = utils.columns_with_new_keys(
+            table=current_table, include_pk=True
+        )
+        current_table.column_list_new_keys_without_pk = utils.columns_with_new_keys(
+            table=current_table, include_pk=False
+        )
+
+        is_pk_composite = current_table.is_pk_entirely_fks()
         temporal_info = utils.get_temporal_info(conn=dest_conn, table=current_table)
 
         if temporal_info:
@@ -108,14 +114,18 @@ for wave in waves_list:
             table=current_table,
         )
 
+        # Before the table merge update any FKs in Stage
+        if current_table.fk_column_list:
+            utils.update_fks_in_stage(conn=dest_conn, table=current_table)
+
         # Call correct merge function based on TableType
         if current_table.type == "IDENTITY":
-            utils.merge_identity_table_data(
-                conn=dest_conn,
-                table=current_table,
-                column_list=column_list_without_pk,
-            )
+            utils.merge_identity_table_data(conn=dest_conn, table=current_table)
+
         elif current_table.type == "UNIQUE":
+            utils.update_pk_columns_in_unique_stage(
+                conn=dest_conn, table=current_table
+            )
             utils.merge_unique_table_data(conn=dest_conn, table=current_table)
 
         # If temporal_type = HISTORY, treat master_table's PK as a FK in History to be updated accordingly
@@ -125,19 +135,16 @@ for wave in waves_list:
                 conn=dest_conn, table=current_table, key_list=combined_keys
             )
 
-        # After the table merge is complete update any FKs
-        if current_table.fk_column_list:
-            utils.update_fks_in_stage(conn=dest_conn, table=current_table)
-
-        # Now that FKs are updated, merge data of remaining table types
         if current_table.type == "COMPOSITE":
             utils.merge_composite_table_data(conn=dest_conn, table=current_table)
+
         elif current_table.type == "HEAP" and temporal_type == "HISTORY":
             utils.insert_temporal_history_table_data(
                 conn=dest_conn,
                 table=current_table,
                 combined_keys=combined_keys,
             )
+
         elif current_table.type == "HEAP":
             utils.merge_heap_table_data(conn=dest_conn, table=current_table)
 

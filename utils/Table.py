@@ -19,7 +19,12 @@ class Table:
     pk_column_list: list = None
     fk_column_list: list = None
     column_list: list = None
+    column_list_without_pk: list = None
+    column_list_with_new_keys: list = None
+    column_list_new_keys_without_pk: list = None
     uniques: dict = None
+    combined_keys: list = None
+    temporal_info: dict = None
 
     def update_type(self, type: TableType):
         self.type = type
@@ -33,7 +38,9 @@ class Table:
     def is_pk_entirely_fks(self):
         # Extract the column names from the PK and FK lists
         pk_columns = [pk["PrimaryKeyName"] for pk in self.pk_column_list]
-        fk_columns = [(fk["parent_table"], fk["parent_column"]) for fk in self.fk_column_list]
+        fk_columns = [
+            (fk["parent_table"], fk["parent_column"]) for fk in self.fk_column_list
+        ]
 
         # Check if all PK columns are in the list of FK columns
         return set(pk_columns).issubset(set(col[1] for col in fk_columns))

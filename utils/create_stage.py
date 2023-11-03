@@ -77,7 +77,13 @@ def create_stage_table_newpk(conn, table: Table):
 
     # Retrieve primary key column information from sys schema
     query = f"""
-    SELECT c.name AS ColumnName, ty.name AS DataType
+    SELECT
+        c.name AS ColumnName,
+        CASE
+            WHEN ty.name IN ('varchar', 'char', 'nvarchar', 'nchar')
+            THEN ty.name + '(' + CAST(c.max_length AS VARCHAR) + ')'
+            ELSE ty.name
+        END AS DataType
     FROM sys.columns c
     INNER JOIN sys.tables t ON c.object_id = t.object_id
     INNER JOIN sys.schemas s ON t.schema_id = s.schema_id

@@ -77,6 +77,24 @@ def update_fks_in_stage(conn, table: Table):
     crsr.close()
 
 
+def update_pk_columns_in_unique_stage(conn, table: Table):
+    "Unique tables have New_ columns that should just match the values of their base columns"
+    crsr = conn.cursor()
+
+    quoted_stage_name = table.quoted_stage_name()
+
+    for pk in table.pk_column_list:
+        update_query = f"""
+            UPDATE {quoted_stage_name}
+            SET New_{pk["PrimaryKeyName"]} = {pk["PrimaryKeyName"]}
+        """
+        crsr.execute(update_query)
+
+        print(f"Updated Unique Table {quoted_stage_name} Key columns: [{pk['PrimaryKeyName']}")
+
+    crsr.close()
+
+
 def update_temporal_history_stage_keys(conn, table: Table, key_list):
     ""
     crsr = conn.cursor()

@@ -2,6 +2,7 @@ from .Table import Table
 from .get_conns import get_conn_string
 from .table_details import (
     get_column_list,
+    columns_with_new_keys,
     get_identity,
     get_column_data_type,
     get_temporal_info,
@@ -33,6 +34,7 @@ from .update_keys import (
     create_key_stage,
     update_new_pk_in_stage,
     update_fks_in_stage,
+    update_pk_columns_in_unique_stage,
     update_temporal_history_stage_keys,
 )
 
@@ -40,6 +42,7 @@ __all__ = [
     Table,
     get_conn_string,
     get_column_list,
+    columns_with_new_keys,
     get_identity,
     get_column_data_type,
     get_temporal_info,
@@ -63,5 +66,6 @@ __all__ = [
     create_key_stage,
     update_new_pk_in_stage,
     update_fks_in_stage,
+    update_pk_columns_in_unique_stage,
     update_temporal_history_stage_keys,
 ]
