@@ -28,13 +28,14 @@ def copy_src_table_to_stage(
     dest_crsr = dest_conn.cursor()
 
     # Insert records into STAGE table
-    if table.identity:
-        dest_crsr.execute(f"SET IDENTITY_INSERT {quoted_stage_name} ON")
-    dest_crsr.fast_executemany = True
-    sql = f"INSERT INTO {quoted_stage_name} ({columns}) VALUES ({placeholders})"
-    dest_crsr.executemany(sql, records)
-    if table.identity:
-        dest_crsr.execute(f"SET IDENTITY_INSERT {quoted_stage_name} OFF")
+    if records:
+        if table.identity:
+            dest_crsr.execute(f"SET IDENTITY_INSERT {quoted_stage_name} ON")
+        dest_crsr.fast_executemany = True
+        sql = f"INSERT INTO {quoted_stage_name} ({columns}) VALUES ({placeholders})"
+        dest_crsr.executemany(sql, records)
+        if table.identity:
+            dest_crsr.execute(f"SET IDENTITY_INSERT {quoted_stage_name} OFF")
 
     dest_crsr.close()
 
