@@ -67,11 +67,20 @@ def merge_identity_table_data(conn, table: Table):
                 combined_condition = " AND ".join(column_conditions)
 
                 # Include the duplicate checking logic using NOT EXISTS
+                condition_parts = []
+                for col in uq_columns:
+                    source_col = f"source.[{col if col in table.column_list_with_new_keys else 'New_' + col}]"
+                    existing_col = f"existing.[{col}]"
+                    condition = f"{existing_col} = {source_col}"
+                    condition_parts.append(condition)
+
+                conditions = ' AND '.join(condition_parts)
+
                 duplicate_check = f"""
-                NOT EXISTS (SELECT 1
-                FROM {quoted_full_name} AS existing
-                WHERE {' AND '.join(f'existing.[{col}] = source.[{col}]' for col in uq_columns)}
-                )
+                    NOT EXISTS (SELECT 1
+                    FROM {quoted_full_name} AS existing
+                    WHERE {conditions}
+                    )
                 """
 
                 # Combine the source column condition and duplicate check with AND
