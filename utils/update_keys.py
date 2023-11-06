@@ -63,8 +63,8 @@ def update_fks_in_stage(conn, table: Table):
 
     for fk in table.fk_column_list:
         update_query = f"""
-            UPDATE {quoted_stage_name}
-            SET New_{fk['parent_column']} =
+            UPDATE stage
+            SET stage.New_{fk['parent_column']} =
             COALESCE(parent.New_{fk['referenced_column']}, parent.{fk['referenced_column']})
             FROM {quoted_stage_name} stage
             INNER JOIN [{table.stage_schema}].[{fk['referenced_table']}] parent
@@ -90,7 +90,7 @@ def update_pk_columns_in_unique_stage(conn, table: Table):
         """
         crsr.execute(update_query)
 
-        print(f"Updated Unique Table {quoted_stage_name} Key columns: [{pk['PrimaryKeyName']}")
+        print(f"Updated Unique Table {quoted_stage_name} Key columns: [{pk['PrimaryKeyName']}]")
 
     crsr.close()
 
