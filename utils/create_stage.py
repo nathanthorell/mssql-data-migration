@@ -189,25 +189,39 @@ def create_stage_temporal_history_keys(
     for key in combined_keys:
         column_name = key["parent_column"]
 
-        # Get the data type of the key from the master table
-        data_type = get_column_data_type(
-            conn=conn,
-            table=master_table,
-            column_name=column_name,
-        )
-
-        new_column_name = f"{new_column_prefix}{column_name}"
-
-        full_name = f"[{table.stage_schema}].[{table.table_name}]"
-
-        # Construct and execute the ALTER TABLE query for each new column
-        alter_query = f"""
-            ALTER TABLE {full_name}
-            ADD [{new_column_name}] {data_type} NULL
+        # Check if the column already exists in the table
+        check_column_query = f"""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = '{table.stage_schema}'
+                AND TABLE_NAME = '{table.table_name}'
+                AND COLUMN_NAME = '{new_column_prefix}{column_name}'
         """
-        crsr.execute(alter_query)
-        print(
-            f"New column '{new_column_name}' added to '{full_name}', data type '{data_type}'."
-        )
+        crsr.execute(check_column_query)
+        column_exists = crsr.fetchone()[0]
+
+        if not column_exists:
+            # Get the data type of the key from the master table
+            data_type = get_column_data_type(
+                conn=conn,
+                table=master_table,
+                column_name=column_name,
+            )
+
+            new_column_name = f"{new_column_prefix}{column_name}"
+
+            full_name = table.quoted_stage_name()
+
+            # Construct and execute the ALTER TABLE query for each new column
+            alter_query = f"""
+                ALTER TABLE {full_name}
+                ADD [{new_column_name}] {data_type} NULL
+            """
+            crsr.execute(alter_query)
+            print(
+                f"New column '{new_column_name}' added to '{full_name}', data type '{data_type}'."
+            )
+        else:
+            print(f"Column '{new_column_prefix}{column_name}' already exists in '{table.quoted_stage_name()}'.")
 
     crsr.close()
