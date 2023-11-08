@@ -112,4 +112,16 @@ def update_temporal_history_stage_keys(conn, table: Table, key_list):
         """
         crsr.execute(update_query)
 
+    # There may still be records in History that no longer have a corresponding parent Id
+    # because the parent rows might have been removed.  In order to keep the history rows and not
+    # point them at incorrect parents, we will replace them with their negative equivalents.
+    # NOTE: This is a hack, but it's the best we can do.
+    for key in key_list:
+        update_query = f"""
+            UPDATE {quoted_stage_name}
+            SET New_{key['parent_column']} = {key['parent_column']} * -1
+            WHERE New_{key['parent_column']} IS NULL
+        """
+        crsr.execute(update_query)
+
     crsr.close()
