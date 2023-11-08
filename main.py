@@ -2,7 +2,11 @@ import json
 import os
 import utils
 import pyodbc
-from time import gmtime, strftime
+from time import gmtime, strftime, time
+from datetime import datetime
+
+# Script Timer
+start_time = time()
 
 # Constants
 SCHEMA = "dbo"
@@ -157,3 +161,9 @@ for wave in waves_list:
 # Close connections
 src_conn.close()
 dest_conn.close()
+
+# End the timer
+end_time = time()
+runtime = end_time - start_time
+formatted_runtime = datetime.utcfromtimestamp(runtime).strftime("%H:%M:%S")
+print(f"Script executed in {formatted_runtime}")
