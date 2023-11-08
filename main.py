@@ -118,16 +118,6 @@ for wave in waves_list:
         if current_table.fk_column_list:
             utils.update_fks_in_stage(conn=dest_conn, table=current_table)
 
-        # Call correct merge function based on TableType
-        if current_table.type == "IDENTITY":
-            utils.merge_identity_table_data(conn=dest_conn, table=current_table)
-
-        elif current_table.type == "UNIQUE":
-            utils.update_pk_columns_in_unique_stage(
-                conn=dest_conn, table=current_table
-            )
-            utils.merge_unique_table_data(conn=dest_conn, table=current_table)
-
         # If temporal_type = HISTORY, treat master_table's PK as a FK in History to be updated accordingly
         # This must be done before re-enabling SYSTEM_VERSIONING
         if temporal_type == "HISTORY":
@@ -135,18 +125,26 @@ for wave in waves_list:
                 conn=dest_conn, table=current_table, key_list=combined_keys
             )
 
-        if current_table.type == "COMPOSITE":
-            utils.merge_composite_table_data(conn=dest_conn, table=current_table)
-
-        elif current_table.type == "HEAP" and temporal_type == "HISTORY":
-            utils.insert_temporal_history_table_data(
-                conn=dest_conn,
-                table=current_table,
-                combined_keys=combined_keys,
-            )
-
-        elif current_table.type == "HEAP":
-            utils.merge_heap_table_data(conn=dest_conn, table=current_table)
+        # Call correct merge function based on TableType
+        match current_table.type:
+            case "IDENTITY":
+                utils.merge_identity_table_data(conn=dest_conn, table=current_table)
+            case "UNIQUE":
+                utils.update_pk_columns_in_unique_stage(
+                    conn=dest_conn, table=current_table
+                )
+                utils.merge_unique_table_data(conn=dest_conn, table=current_table)
+            case "COMPOSITE":
+                utils.merge_composite_table_data(conn=dest_conn, table=current_table)
+            case "HEAP":
+                if temporal_type == "HISTORY":
+                    utils.insert_temporal_history_table_data(
+                        conn=dest_conn,
+                        table=current_table,
+                        combined_keys=combined_keys,
+                    )
+                else:
+                    utils.merge_heap_table_data(conn=dest_conn, table=current_table)
 
         # Re-Enable SYSTEM_VERSIONING after MERGE is finished
         if temporal_type in ["TEMPORAL", "HISTORY"]:
