@@ -78,6 +78,7 @@ def get_uniques(conn, table: Table):
     WHERE i.is_unique = 1
         AND OBJECT_SCHEMA_NAME(i.object_id) = '{table.schema_name}'
         AND OBJECT_NAME(i.object_id) = '{table.table_name}'
+        AND ic.is_included_column = 0 -- Exclude included columns
     ORDER BY constraint_name, column_name;
     """
     crsr.execute(unique_constraints_query)
