@@ -1,11 +1,11 @@
 from utils.Table import Table
 
 
-def get_column_list(conn, table: Table, include_pk=True):
+def get_column_list(conn, table: Table, include_identity=True):
     """get an ordered list of columns from a table"""
     crsr = conn.cursor()
 
-    if include_pk:
+    if include_identity:
         column_list_query = f"""
         DECLARE @column_list NVARCHAR(MAX) = '';
         SELECT @column_list = @column_list + COLUMN_NAME + ','
@@ -41,68 +41,39 @@ def get_column_list(conn, table: Table, include_pk=True):
     return column_list
 
 
-def columns_with_new_keys(table: Table, include_pk):
+def columns_with_new_keys(table: Table, include_identity):
     """Takes the column_list and the combined_keys list and returns
     a column_list with the updated column names"""
     key_columns = []
-    pk_columns = []
-
-    # Extract primary key columns
-    for pk in table.pk_column_list:
-        pk_columns.append(pk["PrimaryKeyName"])
 
     # Always extract foreign key columns
     for fk in table.fk_column_list:
         key_columns.append(fk["parent_column"])
 
-    # Add pk_columns into key_columns if include_pk is True
-    if include_pk:
-        for column in pk_columns:
-            key_columns.append(column)
+    # Add identity into key_columns if include_identity is True
+    if include_identity:
+        key_columns.append(table.identity)
 
     # Create a list to store the modified column names
     modified_columns = []
 
-    column_list_without_pk = [col for col in table.column_list if col not in pk_columns]
+    column_list_without_identity = [col for col in table.column_list if col != table.identity]
 
     # Iterate through the column_list and modify column names if necessary
-    if include_pk:
+    if include_identity:
         for column in table.column_list:
             if column in key_columns:
                 modified_columns.append(f"New_{column}")
             else:
                 modified_columns.append(column)
     else:
-        for column in column_list_without_pk:
+        for column in column_list_without_identity:
             if column in key_columns:
                 modified_columns.append(f"New_{column}")
             else:
                 modified_columns.append(column)
 
     return modified_columns
-
-
-def get_identity(conn, schema_name, table_name):
-    "check if table has an auto-incrementing identity PK"
-    crsr = conn.cursor()
-
-    identity_query = f"""
-        SELECT COLUMN_NAME
-        FROM information_schema.columns
-        WHERE table_schema = '{schema_name}'
-        AND table_name = '{table_name}'
-        AND COLUMNPROPERTY(object_id('{schema_name}.{table_name}'), COLUMN_NAME, 'IsIdentity') = 1
-    """
-    crsr.execute(identity_query)
-    has_identity_row = crsr.fetchone()
-
-    if has_identity_row is not None:
-        has_identity = has_identity_row[0]
-    else:
-        has_identity = None
-
-    crsr.close()
-    return has_identity
 
 
 def get_column_data_type(conn, table: Table, column_name):

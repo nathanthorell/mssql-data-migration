@@ -77,8 +77,7 @@ def create_stage_table_newpk(conn, table: Table):
 
     # Retrieve primary key column information from sys schema
     query = f"""
-    SELECT
-        c.name AS ColumnName,
+    SELECT c.name AS ColumnName,
         CASE
             WHEN ty.name IN ('varchar', 'char', 'nvarchar', 'nchar')
             THEN ty.name + '(' + CAST(c.max_length AS VARCHAR) + ')'
@@ -116,6 +115,47 @@ def create_stage_table_newpk(conn, table: Table):
         crsr.commit()
 
     crsr.close()
+
+
+def create_stage_table_identity(conn, table: Table):
+    "create new column on stage table of the identity column"
+    crsr = conn.cursor()
+
+    quoted_stage_name = table.quoted_stage_name()
+
+    # Retrieve identity column information from sys schema
+    data_type = get_column_data_type(
+            conn=conn,
+            table=table,
+            column_name=table.identity,
+        )
+
+    new_column_prefix = "New_"  # Prefix for the new columns
+    new_column_name = f"{new_column_prefix}{table.identity}"
+
+    # Check if the new column already exists
+    check_query = f"""
+        SELECT COUNT(*)
+        FROM sys.columns c
+        INNER JOIN sys.tables t ON c.object_id = t.object_id
+        INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+        WHERE s.name = '{table.stage_schema}'
+            AND t.name = '{table.table_name}'
+            AND c.name = '{new_column_name}'
+    """
+    crsr.execute(check_query)
+    column_exists = crsr.fetchone()[0]
+
+    if not column_exists:
+        # Construct and execute the ALTER TABLE query for each new column
+        alter_query = f"""
+            ALTER TABLE {quoted_stage_name}
+            ADD [{new_column_name}] {data_type} NULL
+        """
+        crsr.execute(alter_query)
+        print(
+            f"New column '{new_column_name}' added to '{quoted_stage_name}', data type '{data_type}'."
+        )
 
 
 def create_stage_table_fks(conn, table: Table):

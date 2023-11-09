@@ -103,8 +103,8 @@ def merge_identity_table_data(conn, table: Table):
     USING {quoted_stage_name} AS source
     ON 1 = 0  -- Ensures the INSERT part of the MERGE is executed for all rows
     {when_condition} THEN
-        INSERT ({', '.join(table.column_list_without_pk)})
-        VALUES ({', '.join('source.' + col for col in table.column_list_new_keys_without_pk)})
+        INSERT ({', '.join(table.column_list_without_identity)})
+        VALUES ({', '.join('source.' + col for col in table.column_list_new_keys_without_identity)})
     OUTPUT inserted.{table.identity} AS [{new_identity_column}],
         source.{table.identity} AS [{source_identity_column}]
     INTO [{table.stage_schema}].[KeyStage];

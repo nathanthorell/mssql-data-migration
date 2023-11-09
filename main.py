@@ -58,17 +58,17 @@ for wave in waves_list:
         current_table.column_list = utils.get_column_list(
             conn=dest_conn, table=current_table
         )
-        current_table.column_list_without_pk = utils.get_column_list(
-            conn=dest_conn, table=current_table, include_pk=False
+        current_table.column_list_without_identity = utils.get_column_list(
+            conn=dest_conn, table=current_table, include_identity=False
         )
-        current_table.parse_identity()
+        current_table.get_identity(conn=dest_conn)
         current_table.column_list_with_new_keys = utils.columns_with_new_keys(
-            table=current_table, include_pk=True
+            table=current_table, include_identity=True
         )
-        current_table.column_list_new_keys_without_pk = utils.columns_with_new_keys(
-            table=current_table, include_pk=False
+        current_table.column_list_new_keys_without_identity = utils.columns_with_new_keys(
+            table=current_table, include_identity=False
         )
-
+        current_table.get_clustered_on(conn=dest_conn)
         is_pk_composite = current_table.is_pk_entirely_fks()
         temporal_info = utils.get_temporal_info(conn=dest_conn, table=current_table)
 
@@ -76,13 +76,13 @@ for wave in waves_list:
             temporal_type = temporal_info["temporal_type"]
 
         # Check for table type and update current Table variables
-        if current_table.pk_column_list:
-            if current_table.identity:
-                current_table.update_type("IDENTITY")
-            elif is_pk_composite:
-                current_table.update_type("COMPOSITE")
-            else:
-                current_table.update_type("UNIQUE")
+
+        if current_table.identity:
+            current_table.update_type("IDENTITY")
+        elif is_pk_composite:
+            current_table.update_type("COMPOSITE")
+        elif current_table.uniques:
+            current_table.update_type("UNIQUE")
         else:
             current_table.update_type("HEAP")
 
@@ -93,6 +93,10 @@ for wave in waves_list:
 
         if current_table.fk_column_list:
             utils.create_stage_table_fks(conn=dest_conn, table=current_table)
+
+        # Handle rare scenario where theres no PK but there is an identity column
+        if not current_table.pk_column_list and current_table.identity:
+            utils.create_stage_table_identity(conn=dest_conn, table=current_table)
 
         # If table is a Temporal History table, add keys in Stage
         if temporal_type == "HISTORY":
