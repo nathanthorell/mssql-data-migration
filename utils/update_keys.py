@@ -62,10 +62,31 @@ def update_fks_in_stage(conn, table: Table):
     quoted_stage_name = table.quoted_stage_name()
 
     for fk in table.fk_column_list:
+        # This check is needed for rare occasions where an FK points at a column in
+        # a parent table that is not the PK of that table, so a New_ column was never created
+        new_col_check_query = f"""
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = '{table.stage_schema}'
+        AND TABLE_NAME = '{fk['parent_table']}'
+        AND COLUMN_NAME = 'New_{fk['referenced_column']}'
+        """
+        crsr.execute(new_col_check_query)
+        new_column_exists = crsr.fetchone()[0]
+
+        if new_column_exists:
+            coalesce_string = f"""
+            COALESCE(
+                parent.New_{fk['referenced_column']},
+                parent.{fk['referenced_column']}
+            )
+            """
+        else:
+            coalesce_string = f"parent.{fk['referenced_column']}"
+
+        # Main update query for each New_ fk column of the current table
         update_query = f"""
             UPDATE stage
-            SET stage.New_{fk['parent_column']} =
-            COALESCE(parent.New_{fk['referenced_column']}, parent.{fk['referenced_column']})
+            SET stage.New_{fk['parent_column']} = {coalesce_string}
             FROM {quoted_stage_name} stage
             INNER JOIN [{table.stage_schema}].[{fk['referenced_table']}] parent
             ON stage.{fk['parent_column']} = parent.{fk['referenced_column']}
