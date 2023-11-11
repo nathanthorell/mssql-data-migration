@@ -65,8 +65,8 @@ for wave in waves_list:
         current_table.column_list_with_new_keys = utils.columns_with_new_keys(
             table=current_table, include_identity=True
         )
-        current_table.column_list_new_keys_without_identity = utils.columns_with_new_keys(
-            table=current_table, include_identity=False
+        current_table.column_list_new_keys_without_identity = (
+            utils.columns_with_new_keys(table=current_table, include_identity=False)
         )
         current_table.get_clustered_on(conn=dest_conn)
         is_pk_composite = current_table.is_pk_entirely_fks()
@@ -94,8 +94,10 @@ for wave in waves_list:
         if current_table.fk_column_list:
             utils.create_stage_table_fks(conn=dest_conn, table=current_table)
 
-        # Handle rare scenario where theres no PK but there is an identity column
-        if not current_table.pk_column_list and current_table.identity:
+        # Handle rare scenario where the identity column is not part of the PK
+        if current_table.identity and current_table.identity not in [
+            column["PrimaryKeyName"] for column in current_table.pk_column_list
+        ]:
             utils.create_stage_table_identity(conn=dest_conn, table=current_table)
 
         # If table is a Temporal History table, add keys in Stage

@@ -44,8 +44,9 @@ class Table:
         ]
 
         # Check if all PK columns are in the list of FK columns
-        if pk_columns:
-            return set(pk_columns).issubset(set(col[1] for col in fk_columns))
+        if pk_columns and fk_columns:
+            fk_set = set(col[1] for col in fk_columns)
+            return set(pk_columns).issubset(fk_set)
         else:
             return None
 

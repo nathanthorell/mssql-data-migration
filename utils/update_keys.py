@@ -67,7 +67,7 @@ def update_fks_in_stage(conn, table: Table):
         new_col_check_query = f"""
         SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA = '{table.stage_schema}'
-        AND TABLE_NAME = '{fk['parent_table']}'
+        AND TABLE_NAME = '{fk['referenced_table']}'
         AND COLUMN_NAME = 'New_{fk['referenced_column']}'
         """
         crsr.execute(new_col_check_query)
