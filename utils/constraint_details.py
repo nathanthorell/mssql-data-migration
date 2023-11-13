@@ -89,8 +89,8 @@ def get_uniques(conn, table: Table):
         column_name = row.column_name
 
         # Exclude constraints that match the primary key
-        primary_key_columns = get_primary_key(conn=conn, table=table)
-        if column_name not in primary_key_columns:
+        pk_columns = ", ".join(item["PrimaryKeyName"] for item in table.pk_column_list)
+        if column_name not in pk_columns:
             if constraint_name not in unique_constraints:
                 unique_constraints[constraint_name] = []
             unique_constraints[constraint_name].append(column_name)

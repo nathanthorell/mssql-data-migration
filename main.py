@@ -81,7 +81,7 @@ for wave in waves_list:
             current_table.update_type("IDENTITY")
         elif is_pk_composite:
             current_table.update_type("COMPOSITE")
-        elif current_table.uniques:
+        elif current_table.uniques or current_table.pk_column_list:
             current_table.update_type("UNIQUE")
         else:
             current_table.update_type("HEAP")

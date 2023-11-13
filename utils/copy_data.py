@@ -40,6 +40,45 @@ def copy_src_table_to_stage(
     dest_crsr.close()
 
 
+def build_unique_conditions(table: Table):
+    "build the WHEN condition based on uniques"
+    quoted_full_name = table.quoted_full_name()
+
+    when_conditions = []
+    for constraint_name, uq_columns in table.uniques.items():
+        # Create a list of conditions for each column in the unique constraint
+        column_conditions = []
+        for col in uq_columns:
+            # Check that the source column is not NULL
+            column_conditions.append(f"source.[{col}] IS NOT NULL")
+
+        combined_condition = " AND ".join(column_conditions)
+
+        # Include the duplicate checking logic using NOT EXISTS
+        condition_parts = []
+        for col in uq_columns:
+            source_col = f"source.[{col if col in table.column_list_with_new_keys else 'New_' + col}]"
+            existing_col = f"existing.[{col}]"
+            condition = f"{existing_col} = {source_col}"
+            condition_parts.append(condition)
+
+        conditions = ' AND '.join(condition_parts)
+
+        duplicate_check = f"""
+            NOT EXISTS (SELECT 1
+            FROM {quoted_full_name} AS existing
+            WHERE {conditions}
+            )
+        """
+
+        # Combine the source column condition and duplicate check with AND
+        full_condition = f"({combined_condition}) AND {duplicate_check}"
+
+        # Add the full condition to the list of when_conditions
+        when_conditions.append(full_condition)
+    return when_conditions
+
+
 def merge_identity_table_data(conn, table: Table):
     "take data from stage and insert it into destination tables returning PK values to stage"
     crsr = conn.cursor()
@@ -54,40 +93,7 @@ def merge_identity_table_data(conn, table: Table):
 
     # build the WHEN condition based on uniques
     if table.uniques:
-        when_conditions = []
-        for constraint_name, uq_columns in table.uniques.items():
-            # The PK is technically a UNIQUE constraint, but we need to ignore it
-            if not all(column in table.identity for column in uq_columns):
-                # Create a list of conditions for each column in the unique constraint
-                column_conditions = []
-                for col in uq_columns:
-                    # Check that the source column is not NULL
-                    column_conditions.append(f"source.[{col}] IS NOT NULL")
-
-                combined_condition = " AND ".join(column_conditions)
-
-                # Include the duplicate checking logic using NOT EXISTS
-                condition_parts = []
-                for col in uq_columns:
-                    source_col = f"source.[{col if col in table.column_list_with_new_keys else 'New_' + col}]"
-                    existing_col = f"existing.[{col}]"
-                    condition = f"{existing_col} = {source_col}"
-                    condition_parts.append(condition)
-
-                conditions = ' AND '.join(condition_parts)
-
-                duplicate_check = f"""
-                    NOT EXISTS (SELECT 1
-                    FROM {quoted_full_name} AS existing
-                    WHERE {conditions}
-                    )
-                """
-
-                # Combine the source column condition and duplicate check with AND
-                full_condition = f"({combined_condition}) AND {duplicate_check}"
-
-                # Add the full condition to the list of when_conditions
-                when_conditions.append(full_condition)
+        when_conditions = build_unique_conditions(table=table)
 
         # Combine all conditions with OR since any of them can apply
         if when_conditions:
@@ -169,6 +175,18 @@ def merge_composite_table_data(conn, table: Table):
 
     pk_conditions = " AND ".join(pk_conditions)
 
+    # build the WHEN condition based on uniques
+    if table.uniques:
+        when_conditions = build_unique_conditions(table=table)
+
+        # Combine all conditions with OR since any of them can apply
+        if when_conditions:
+            when_condition = f"WHEN NOT MATCHED AND {' AND '.join(when_conditions)}"
+        else:
+            when_condition = "WHEN NOT MATCHED"
+    else:
+        when_condition = "WHEN NOT MATCHED"
+
     # Construct the VALUES part
     values_part = ", ".join(
         f"source.New_{col}" if col in values_columns else f"source.{col}"
@@ -179,7 +197,7 @@ def merge_composite_table_data(conn, table: Table):
     MERGE INTO {quoted_full_name} AS target
     USING {quoted_stage_name} AS source
     ON {pk_conditions}
-    WHEN NOT MATCHED THEN
+    {when_condition} THEN
         INSERT ({', '.join(table.column_list)})
         VALUES ({values_part});
     """
