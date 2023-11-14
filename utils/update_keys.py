@@ -111,22 +111,44 @@ def update_pk_columns_in_unique_stage(conn, table: Table):
         """
         crsr.execute(update_query)
 
-        print(f"Updated Unique Table {quoted_stage_name} Key columns: [{pk['PrimaryKeyName']}]")
+        print(
+            f"Updated Unique Table {quoted_stage_name} Key columns: [{pk['PrimaryKeyName']}]"
+        )
 
     crsr.close()
 
 
 def update_temporal_history_stage_keys(conn, table: Table, key_list):
-    ""
+    "Update key columns in Stage schema for a temporal history table"
     crsr = conn.cursor()
 
     quoted_stage_name = table.quoted_stage_name()
 
     for key in key_list:
+        # This check is needed for rare occasions where an FK points at a column in
+        # a parent table that is not the PK of that table, so a New_ column was never created
+        new_col_check_query = f"""
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = '{table.stage_schema}'
+        AND TABLE_NAME = '{key['referenced_table']}'
+        AND COLUMN_NAME = 'New_{key['referenced_column']}'
+        """
+        crsr.execute(new_col_check_query)
+        new_column_exists = crsr.fetchone()[0]
+
+        if new_column_exists:
+            coalesce_string = f"""
+            COALESCE(
+                parent.New_{key['referenced_column']},
+                parent.{key['referenced_column']}
+            )
+            """
+        else:
+            coalesce_string = f"parent.{key['referenced_column']}"
+
         update_query = f"""
             UPDATE {quoted_stage_name}
-            SET New_{key['parent_column']} =
-            COALESCE(parent.New_{key['referenced_column']}, parent.{key['referenced_column']})
+            SET New_{key['parent_column']} = {coalesce_string}
             FROM {quoted_stage_name} stage
             INNER JOIN [{table.stage_schema}].[{key['referenced_table']}] parent
             ON stage.{key['parent_column']} = parent.{key['referenced_column']}
@@ -138,11 +160,23 @@ def update_temporal_history_stage_keys(conn, table: Table, key_list):
     # point them at incorrect parents, we will replace them with their negative equivalents.
     # NOTE: This is a hack, but it's the best we can do.
     for key in key_list:
-        update_query = f"""
-            UPDATE {quoted_stage_name}
-            SET New_{key['parent_column']} = {key['parent_column']} * -1
-            WHERE New_{key['parent_column']} IS NULL
-        """
-        crsr.execute(update_query)
+        col_data_type = get_column_data_type(
+            conn=conn, table=table, column_name=key["parent_column"]
+        )
+
+        if col_data_type in (
+            "int",
+            "integer",
+            "bigint",
+            "biginteger",
+            "smallint",
+            "smallinteger",
+        ):
+            update_query = f"""
+                UPDATE {quoted_stage_name}
+                SET New_{key['parent_column']} = {key['parent_column']} * -1
+                WHERE New_{key['parent_column']} IS NULL
+            """
+            crsr.execute(update_query)
 
     crsr.close()
