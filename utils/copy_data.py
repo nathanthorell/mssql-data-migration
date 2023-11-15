@@ -226,6 +226,18 @@ def merge_unique_table_data(conn, table: Table):
 
     pk_conditions = " AND ".join(pk_conditions)
 
+    # build the WHEN condition based on uniques
+    if table.uniques:
+        when_conditions = build_unique_conditions(table=table)
+
+        # Combine all conditions with OR since any of them can apply
+        if when_conditions:
+            when_condition = f"WHEN NOT MATCHED AND {' AND '.join(when_conditions)}"
+        else:
+            when_condition = "WHEN NOT MATCHED"
+    else:
+        when_condition = "WHEN NOT MATCHED"
+
     # Construct the VALUES part
     values_part = ", ".join(
         f"source.{col}" if col in values_columns else f"source.{col}"
@@ -236,7 +248,7 @@ def merge_unique_table_data(conn, table: Table):
     MERGE INTO {quoted_full_name} AS target
     USING {quoted_stage_name} AS source
     ON {pk_conditions}
-    WHEN NOT MATCHED THEN
+    {when_condition} THEN
         INSERT ({', '.join(table.column_list)})
         VALUES ({values_part});
     """
