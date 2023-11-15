@@ -10,7 +10,10 @@ def get_column_list(conn, table: Table, include_identity=True):
         DECLARE @column_list NVARCHAR(MAX) = '';
         SELECT @column_list = @column_list + COLUMN_NAME + ','
         FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = '{table.schema_name}' AND TABLE_NAME = '{table.table_name}';
+        WHERE TABLE_SCHEMA = '{table.schema_name}' AND TABLE_NAME = '{table.table_name}'
+            AND COLUMNPROPERTY(
+                object_id('{table.schema_name}.{table.table_name}'), COLUMN_NAME, 'IsComputed'
+            ) = 0;
         SELECT @column_list AS ColumnList;
         """
     else:
@@ -19,8 +22,11 @@ def get_column_list(conn, table: Table, include_identity=True):
         SELECT @column_list = @column_list + COLUMN_NAME + ','
         FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA = '{table.schema_name}' AND TABLE_NAME = '{table.table_name}'
-        AND NOT COLUMNPROPERTY(
-            object_id('{table.schema_name}.{table.table_name}'), COLUMN_NAME, 'IsIdentity'
+            AND COLUMNPROPERTY(
+                object_id('{table.schema_name}.{table.table_name}'), COLUMN_NAME, 'IsComputed'
+            ) = 0
+            AND NOT COLUMNPROPERTY(
+                object_id('{table.schema_name}.{table.table_name}'), COLUMN_NAME, 'IsIdentity'
             ) = 1;
         SELECT @column_list AS ColumnList;
         """
